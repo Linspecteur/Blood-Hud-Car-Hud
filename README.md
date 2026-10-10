@@ -84,4 +84,3 @@ Utilisation gratuite sur ton serveur, modifications autorisées pour ton usage. 
 - Icônes : [Font Awesome Free](https://fontawesome.com) (licence CC BY 4.0)
 
 Un bug ou une idée ? Ouvre une issue sur ce dépôt.
-Shell cwd was reset to c:\Users\natha\Desktop\BloodLeak v2\[JOB INTERIME]\bl_amazon
