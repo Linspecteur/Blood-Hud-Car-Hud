@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BloodLeak Car HUD - Luxury Cockpit Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;1,700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    /* --- VARIABLES DE THÈME --- */
+    :root {
+      --hud-scale: 1.0;
+      
+      /* Typographies officielles BloodLeak */
+      --f-ui: 'Barlow Condensed', sans-serif;
+      --f-mono: 'IBM Plex Mono', monospace;
+      --f-brand: 'Outfit', sans-serif;
+
+      /* Palette Emissive BloodLeak */
+      --c-cyan: #00e5ff;
+      --c-cyan-glow: rgba(0, 229, 255, 0.6);
+      --c-red: #e50914;
+      --c-red-bright: #ff3344;
+      --c-red-glow: rgba(229, 9, 20, 0.65);
+      --c-amber: #ffb700;
+      --c-amber-bright: #ffd32a;
+      --c-green: #2ecc71;
+      --c-seatbelt: #ff4757;
+      --c-blue-high: #3b82f6;
+
+      /* Textes Haute Visibilité (Contrast Boosted) */
+      --c-text-pure: #ffffff;
+      --c-text-pri: rgba(240, 246, 255, 0.98);
+      --c-text-sec: rgba(195, 215, 245, 0.88);
+      --c-text-dim: rgba(145, 170, 210, 0.65);
+
+      /* Surfaces Razor (Zéro backdrop blur, zéro bulles rondes) */
+      --panel-bg: rgba(7, 9, 16, 0.72);
+      --panel-sub-bg: rgba(255, 255, 255, 0.025);
+      --border-cyan: rgba(0, 229, 255, 0.16);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --bar-skew: -12deg;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      background: transparent !important;
+      font-family: var(--f-ui);
+      color: var(--c-text-pure);
+      -webkit-font-smoothing: antialiased;
+      pointer-events: none;
+    }
+
+    /* Standalone backdrop (only outside FiveM) */
+    #standalone-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+    #standalone-backdrop.preview-dark {
+      background: radial-gradient(circle at 85% 85%, #161b26 0%, #07090e 75%);
+    }
+    #standalone-backdrop.preview-day {
+      background: radial-gradient(circle at 85% 85%, #58697d 0%, #252e39 70%);
+    }
+    #standalone-backdrop.preview-trans {
+      background: transparent;
+    }
+
+    /* --- CLUSTER MASTER CONTAINER (SPEEDOMÈTRE GAUCHE + INFOS DROITE) --- */
+    #speedo-container {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      z-index: 100;
+      transform-origin: bottom right;
+      transform: scale(var(--hud-scale)) translateY(18px);
+      opacity: 0;
+      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 18px;
+      width: auto;
+    }
+    #speedo-container.active {
+      opacity: 1;
+      transform: scale(var(--hud-scale)) translateY(0);
+      pointer-events: auto;
+    }
+
+    /* LEFT CLUSTER (SPEEDOMETER & GT3 SHIFT LIGHTS) */
+    .cockpit-left-cluster {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 236px;
+      flex-shrink: 0;
+    }
+
+    /* SHIFT LIGHTS */
+    .shift-lights-ramp {
+      width: 216px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3.5px;
+      padding: 4px 8px;
+      background: rgba(12, 14, 18, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 6px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      z-index: 5;
+    }
+    .shift-led {
+      flex: 1;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      transition: background 0.06s ease, box-shadow 0.06s ease;
+    }
+    .shift-led.green.on {
+      background: var(--c-green);
+      box-shadow: 0 0 8px var(--c-green);
+    }
+    .shift-led.amber.on {
+      background: var(--c-amber);
+      box-shadow: 0 0 8px var(--c-amber);
+    }
+    .shift-led.red.on {
+      background: var(--c-red-bright);
+      box-shadow: 0 0 10px var(--c-red-bright);
+    }
+    .shift-led.limiter-flash {
+      background: #ffffff !important;
+      box-shadow: 0 0 12px #ffffff, 0 0 20px var(--c-red-bright) !important;
+      animation: limiterStrobe 0.09s infinite alternate;
+    }
+    @keyframes limiterStrobe {
+      from { opacity: 0.3; }
+      to   { opacity: 1; }
+    }
+
+    /* CADRAN DU COMPTEUR */
+    .speedo-dial-wrapper {
+      position: relative;
+      width: 236px;
+      height: 236px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible;
+    }
+
+    .dial-smoked-disc {
+      display: none;
+    }
+
+    .dial-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 236px;
+      height: 236px;
+      z-index: 2;
+      overflow: visible !important;
+    }
+
+    /* SVG Tracks */
+    .arc-bg-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.09);
+      stroke-width: 5.5;
+      stroke-linecap: round;
+    }
+    .arc-inner-dash {
+      fill: none;
+      stroke: rgba(0, 229, 255, 0.16);
+      stroke-width: 1.2;
+      stroke-dasharray: 2 4;
+    }
+    .arc-redline-track {
+      fill: none;
+      stroke: rgba(229, 9, 20, 0.45);
+      stroke-width: 5.5;
+      stroke-linecap: round;
+    }
+    .arc-rpm-progress {
+      fill: none;
+      stroke: url(#rpmColorGrad);
+      stroke-width: 5.5;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.05s linear;
+      filter: drop-shadow(0 0 3px rgba(0, 229, 255, 0.5));
+    }
+    .arc-rpm-progress.redline {
+      filter: drop-shadow(0 0 4px rgba(229, 9, 20, 0.7));
+    }
+
+    /* Precision Laser Ticks */
+    .tick-laser {
+      stroke: rgba(255, 255, 255, 0.22);
+      stroke-width: 1.2;
+      stroke-linecap: round;
+    }
+    .tick-laser.major {
+      stroke: rgba(255, 255, 255, 0.75);
+      stroke-width: 1.8;
+    }
+    .tick-laser.redline {
+      stroke: var(--c-red-bright);
+    }
+
+    /* Radial Tachometer Numbers (0 to 9) */
+    .rpm-num {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      font-weight: 700;
+      fill: rgba(255, 255, 255, 0.45);
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+    .rpm-num.active {
+      fill: #ffffff;
+      font-weight: 700;
+    }
+    .rpm-num.redline {
+      fill: var(--c-red-bright);
+      font-weight: 700;
+    }
+
+    /* Laser Needle Dot */
+    .needle-dot {
+      fill: #ffffff;
+      filter: drop-shadow(0 0 4px #00e5ff);
+      transition: cx 0.05s linear, cy 0.05s linear;
+    }
+    .needle-dot.redline {
+      fill: #ffd32a;
+      filter: drop-shadow(0 0 4px var(--c-red-bright));
+    }
+
+    /* Center Digital Cockpit */
+    .dial-center {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    /* PRND Selector Track */
+    .prnd-strip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--f-mono);
+      font-size: 9px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.25);
+      letter-spacing: 1.2px;
+      margin-bottom: 2px;
+    }
+    .prnd-strip span {
+      transition: color 0.15s, text-shadow 0.15s;
+    }
+    .prnd-strip span.active {
+      color: #ffffff;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+      font-weight: 700;
+    }
+    .prnd-strip span.active[data-g="P"],
+    .prnd-strip span.active[data-g="R"] {
+      color: var(--c-red-bright);
+      text-shadow: 0 0 8px var(--c-red);
+    }
+    .prnd-strip span.active[data-g="N"] {
+      color: var(--c-amber);
+      text-shadow: 0 0 8px var(--c-amber);
+    }
+    .prnd-strip span.active[data-g="D"] {
+      color: var(--c-cyan);
+      text-shadow: 0 0 8px var(--c-cyan);
+    }
+
+    /* Racing Gear Badge (Chanfreiné GT3) */
+    .gear-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      height: 25px;
+      padding: 0 8px;
+      background: linear-gradient(135deg, #e50914 0%, #a0060e 100%);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+      font-family: var(--f-brand);
+      font-size: 15px;
+      font-weight: 900;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      margin-bottom: 2px;
+      transition: transform 0.08s ease;
+    }
+    .gear-badge.pop {
+      transform: scale(1.22);
+    }
+
+    /* Speed Large Digital */
+    .speed-number {
+      font-family: var(--f-brand);
+      font-weight: 900;
+      font-size: 60px;
+      line-height: 0.88;
+      letter-spacing: -2px;
+      color: #ffffff;
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.95), 0 0 20px rgba(0, 229, 255, 0.15);
+    }
+    .speed-number .dim {
+      color: rgba(255, 255, 255, 0.22);
+    }
+
+    .speed-unit {
+      font-family: var(--f-ui);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 2.5px;
+      color: var(--c-text-sec);
+      text-transform: uppercase;
+      margin-top: 2px;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+    }
+
+    .rpm-telemetry {
+      font-family: var(--f-mono);
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      color: var(--c-cyan);
+      margin-top: 3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+    }
+    .rpm-telemetry .rpm-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--c-cyan);
+      box-shadow: 0 0 6px var(--c-cyan);
+    }
+
+    /* RAPPORT & CLIGNOTANTS */
+    .gear-turn-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      margin-bottom: 2px;
+      z-index: 15;
+    }
+    .turn-indicator-pod {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1.5px 5px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      color: rgba(46, 204, 113, 0.32);
+      font-family: var(--f-mono);
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .turn-indicator-pod .turn-arrow-icon {
+      font-size: 9px;
+      transition: all 0.12s ease;
+    }
+    .turn-indicator-pod .turn-keycap {
+      font-family: var(--f-brand);
+      font-size: 7px;
+      font-weight: 800;
+      opacity: 0.65;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.2px;
+    }
+    .turn-indicator-pod.on {
+      background: rgba(0, 255, 136, 0.22);
+      border-color: rgba(0, 255, 136, 0.8);
+      color: #00ff88;
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.6), inset 0 0 6px rgba(0, 255, 136, 0.25);
+      animation: turnSignalStrobe 0.38s infinite alternate;
+    }
+    .turn-indicator-pod.on .turn-arrow-icon {
+      color: #00ff88;
+      filter: drop-shadow(0 0 6px #00ff88);
+    }
+    .turn-indicator-pod.on .turn-keycap {
+      opacity: 1;
+      color: #ffffff;
+      text-shadow: 0 0 6px #00ff88;
+    }
+    @keyframes turnSignalStrobe {
+      0%, 45% {
+        opacity: 1;
+        filter: brightness(1.25);
+      }
+      50%, 100% {
+        opacity: 0.22;
+        filter: brightness(0.7);
+      }
+    }
+
+    .dial-cruise-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--f-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #00e5ff;
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.45);
+      padding: 1.5px 6.5px;
+      border-radius: 3px;
+      margin-top: 3px;
+      text-shadow: 0 0 6px rgba(0, 229, 255, 0.8);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
+      animation: cruiseGlowPulse 1.8s infinite alternate;
+    }
+    .dial-cruise-keys {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 7px;
+      color: rgba(255, 255, 255, 0.75);
+      background: rgba(0, 229, 255, 0.22);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      border-radius: 2.5px;
+      padding: 0.5px 3.5px;
+      letter-spacing: 0.2px;
+    }
+    @keyframes cruiseGlowPulse {
+      from { border-color: rgba(0, 229, 255, 0.35); box-shadow: 0 0 6px rgba(0, 229, 255, 0.2); }
+      to   { border-color: rgba(0, 229, 255, 0.7); box-shadow: 0 0 12px rgba(0, 229, 255, 0.45); }
+    }
+
+    /* --- 4. CONSOLE DE TÉLÉMÉTRIE (DROITE) --- */
+    .cockpit-right-console {
+      width: 380px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      background: rgba(10, 12, 18, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      z-index: 5;
+    }
+
+    /* ROW 1: HEADER (VEHICLE NAME, MODE & CRUISE) */
+    .console-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .console-title-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .vehicle-spotlight-plaque {
+      display: flex;
+      align-items: center;
+      gap: 4.5px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(18, 22, 32, 0.75) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-left: 2px solid var(--c-cyan);
+      border-radius: 4px;
+      padding: 2px 5.5px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      flex-shrink: 1;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .vehicle-brand-badge {
+      font-size: 9.5px;
+      color: var(--c-cyan);
+      filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.6));
+      flex-shrink: 0;
+    }
+    .vehicle-title {
+      font-family: var(--f-brand);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #ffffff;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 125px;
+      background: linear-gradient(180deg, #ffffff 45%, #b2bec3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+    }
+    .drive-mode-badge {
+      font-family: var(--f-mono);
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 1.5px 4.5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .drive-mode-badge.comfort,
+    .drive-mode-badge.confort {
+      background: rgba(46, 204, 113, 0.14);
+      color: #2ecc71;
+      border: 1px solid rgba(46, 204, 113, 0.35);
+    }
+    .drive-mode-badge.sport {
+      background: rgba(241, 196, 15, 0.16);
+      color: #f1c40f;
+      border: 1px solid rgba(241, 196, 15, 0.45);
+    }
+    .drive-mode-badge.track,
+    .drive-mode-badge.circuit {
+      background: rgba(229, 9, 20, 0.2);
+      color: #ff4757;
+      border: 1px solid rgba(229, 9, 20, 0.5);
+    }
+    .drive-mode-badge.drift {
+      background: rgba(191, 90, 242, 0.18);
+      color: #d980fa;
+      border: 1px solid rgba(191, 90, 242, 0.45);
+    }
+    .drive-mode-badge.cruise,
+    .drive-mode-badge.croisiere,
+    .drive-mode-badge.croisière {
+      background: rgba(0, 229, 255, 0.16);
+      color: #00e5ff;
+      border: 1px solid rgba(0, 229, 255, 0.5);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
+    }
+    .cruise-badge {
+      font-family: var(--f-mono);
+      font-size: 7.5px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      padding: 1.5px 4px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 2.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: auto;
+    }
+    .cruise-badge i {
+      font-size: 8px;
+      opacity: 0.75;
+      transition: all 0.2s;
+    }
+    .cruise-title {
+      font-family: var(--f-brand);
+      font-size: 7.5px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .cruise-key-cap {
+      font-family: var(--f-brand);
+      font-size: 6px;
+      font-weight: 800;
+      padding: 0.5px 2px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.7);
+      letter-spacing: 0.2px;
+    }
+    .cruise-speed-cluster {
+      display: inline-flex;
+      align-items: center;
+      gap: 1.5px;
+    }
+    .cruise-adjust-pip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 9.5px;
+      height: 9.5px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 5.5px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cruise-adjust-pip:hover {
+      background: var(--c-cyan);
+      color: #000000;
+      box-shadow: 0 0 6px rgba(0, 229, 255, 0.6);
+    }
+    .cruise-val {
+      font-family: var(--f-mono);
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      color: rgba(255, 255, 255, 0.6);
+      min-width: 30px;
+      text-align: center;
+    }
+    .cruise-speed-hint {
+      font-family: var(--f-brand);
+      font-size: 6.5px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.2px;
+    }
+    .cruise-badge.active {
+      background: rgba(0, 229, 255, 0.16);
+      border-color: rgba(0, 229, 255, 0.5);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+    }
+    .cruise-badge.active i {
+      color: var(--c-cyan);
+      opacity: 1;
+    }
+    .cruise-badge.active .cruise-title {
+      color: #ffffff;
+    }
+    .cruise-badge.active .cruise-key-cap {
+      background: rgba(0, 229, 255, 0.25);
+      border-color: rgba(0, 229, 255, 0.55);
+      color: #ffffff;
+    }
+    .cruise-badge.active .cruise-adjust-pip {
+      background: rgba(0, 229, 255, 0.18);
+      color: #00e5ff;
+      border: 1px solid rgba(0, 229, 255, 0.35);
+    }
+    .cruise-badge.active .cruise-adjust-pip:hover {
+      background: #00e5ff;
+      color: #000000;
+    }
+    .cruise-badge.active .cruise-val {
+      color: var(--c-cyan);
+      font-weight: 800;
+      text-shadow: 0 0 6px var(--c-cyan);
+    }
+    .cruise-badge.active .cruise-speed-hint {
+      color: #00e5ff;
+      opacity: 0.9;
+      text-shadow: 0 0 5px rgba(0, 229, 255, 0.6);
+    }
+
+    /* AUTO-CONDUITE VIP/STAFF BADGE */
+    .autodrive-badge {
+      font-family: var(--f-mono);
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 1.5px 4px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 2.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      transition: all 0.25s ease;
+    }
+    .autodrive-badge i {
+      font-size: 7.5px;
+      opacity: 0.6;
+    }
+    .autodrive-badge.active {
+      background: rgba(0, 229, 255, 0.14);
+      border-color: rgba(0, 229, 255, 0.5);
+      color: #00e5ff;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+      animation: autodrivePulse 1.6s ease-in-out infinite;
+    }
+    .autodrive-badge.active i {
+      opacity: 1;
+      color: #00e5ff;
+    }
+    @keyframes autodrivePulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(0, 229, 255, 0.25); }
+      50%       { box-shadow: 0 0 14px rgba(0, 229, 255, 0.6); }
+    }
+
+    /* HUD NOTIFICATIONS (hudNotif) */
+    #hud-notif-overlay {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .hud-notif {
+      font-family: var(--f-mono, 'Share Tech Mono', monospace);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      padding: 6px 16px;
+      border-radius: 5px;
+      background: rgba(10, 12, 18, 0.92);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #ffffff;
+      animation: notifFadeIn 0.2s ease, notifFadeOut 0.4s ease forwards;
+      animation-delay: 0s, calc(var(--dur, 2.5s) - 0.4s);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    @keyframes notifFadeIn  { from { opacity:0; transform: translateY(-8px); } to { opacity:1; transform: translateY(0); } }
+    @keyframes notifFadeOut { from { opacity:1; } to { opacity:0; transform: translateY(-6px); } }
+
+    /* LIGNE 2 : TURBO */
+    .console-turbo-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 3.5px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 5px;
+      padding: 6px 9px;
+    }
+    .turbo-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .turbo-tag {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--f-brand);
+      font-size: 9.5px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .turbo-tag i {
+      color: var(--c-cyan);
+      font-size: 9.5px;
+    }
+    .turbo-state-pill {
+      font-family: var(--f-mono);
+      font-size: 7px;
+      font-weight: 700;
+      padding: 1px 3.5px;
+      border-radius: 2.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      transition: all 0.2s ease;
+    }
+    .turbo-state-pill.vac   { background: rgba(0, 229, 255, 0.12); color: var(--c-cyan); border: 1px solid rgba(0, 229, 255, 0.3); }
+    .turbo-state-pill.spool { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.35); }
+    .turbo-state-pill.boost { background: rgba(241, 196, 15, 0.18); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.4); }
+    .turbo-state-pill.peak  { background: rgba(229, 9, 20, 0.25); color: #ff4757; border: 1px solid rgba(229, 9, 20, 0.6); }
+
+    .turbo-val-group {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      font-family: var(--f-mono);
+    }
+    .turbo-val-group .val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.2px;
+    }
+    .turbo-val-group .val small {
+      font-size: 8px;
+      font-weight: 600;
+      color: var(--c-cyan);
+      margin-left: 1px;
+    }
+    .turbo-val-group .peak {
+      font-size: 7px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 0.5px 3px;
+      border-radius: 2px;
+    }
+    .turbo-val-group .peak span { color: #ffd32a; font-weight: 700; }
+
+    /* Turbo Solid Automotive Track */
+    .turbo-laser-track {
+      position: relative;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      display: flex;
+      overflow: hidden;
+    }
+    .turbo-vac-side {
+      width: 33.33%;
+      height: 100%;
+      display: flex;
+      justify-content: flex-end;
+      border-right: 1.5px solid rgba(255, 255, 255, 0.35);
+      position: relative;
+    }
+    .turbo-vac-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0984e3, #00cec9);
+      transition: width 0.06s linear;
+    }
+    .turbo-boost-side {
+      width: 66.67%;
+      height: 100%;
+      position: relative;
+    }
+    .turbo-boost-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00cec9 0%, #f1c40f 55%, #e74c3c 90%);
+      transition: width 0.06s linear;
+    }
+    .turbo-peak-pip {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: #ffd32a;
+      box-shadow: 0 0 5px #ffd32a;
+      left: 33.33%;
+      transition: left 0.1s linear;
+      z-index: 5;
+    }
+    .turbo-ticks-scale {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--f-mono);
+      font-size: 7px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.2px;
+      margin-top: 1px;
+    }
+    .turbo-ticks-scale span.center-zero {
+      color: rgba(255, 255, 255, 0.8);
+      font-weight: 700;
+    }
+
+    /* LIGNE 3 : CARBURANT, MOTEUR & CARROSSERIE */
+    .console-metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4.5px;
+    }
+    .metric-card {
+      display: flex;
+      flex-direction: column;
+      gap: 2.5px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 5px;
+      padding: 5px 6.5px;
+      position: relative;
+    }
+    .metric-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .metric-label-group {
+      display: flex;
+      align-items: center;
+      gap: 3.5px;
+    }
+    .icon-fuel   { color: #f39c12; font-size: 9.5px; }
+    .icon-engine { color: var(--c-cyan); font-size: 9.5px; }
+    .icon-body   { color: #2ecc71; font-size: 9.5px; }
+    .metric-label {
+      font-family: var(--f-brand);
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+    }
+    .metric-value-group {
+      font-family: var(--f-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .metric-value-group small {
+      font-size: 7.5px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-left: 1px;
+    }
+
+    /* Smooth Automotive Bars */
+    .stat-track {
+      position: relative;
+      width: 100%;
+      height: 3.5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .stat-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      border-radius: 2px;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      max-width: 100%;
+    }
+    .metric-card.fuel .stat-fill {
+      background: linear-gradient(90deg, #d35400, #f39c12);
+      box-shadow: 0 0 6px rgba(243, 156, 18, 0.4);
+    }
+    .metric-card.engine .stat-fill {
+      background: linear-gradient(90deg, #00b894, #00cec9);
+      box-shadow: 0 0 6px rgba(0, 206, 201, 0.4);
+    }
+    .metric-card.body .stat-fill {
+      background: linear-gradient(90deg, #10ac84, #2ecc71);
+      box-shadow: 0 0 6px rgba(46, 204, 113, 0.4);
+    }
+    .metric-card.fuel.alert .stat-fill,
+    .metric-card.engine.alert .stat-fill,
+    .metric-card.body.alert .stat-fill {
+      background: var(--c-red-bright) !important;
+      box-shadow: 0 0 8px var(--c-red-bright) !important;
+      animation: alertPulse 0.4s infinite alternate;
+    }
+
+    .metric-card-sub {
+      font-family: var(--f-mono);
+      font-size: 8px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .metric-card.fuel .metric-card-sub   { color: #ffd32a; }
+    .metric-card.engine .metric-card-sub { color: #81ecec; }
+    .metric-card.body .metric-card-sub   { color: #a8ff78; }
+
+    /* ROW 4: FOOTER (ODOMETER, ASSISTS & TELLTALES) */
+    .console-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      white-space: nowrap;
+      gap: 4px;
+    }
+    .odo-cluster {
+      font-family: var(--f-mono);
+      font-size: 8.5px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      color: rgba(255, 255, 255, 0.45);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .odo-cluster span span {
+      color: #ffffff;
+      font-weight: 700;
+    }
+    .odo-cluster .dot-sep {
+      color: var(--c-red);
+      font-size: 4px;
+    }
+
+    /* Electronics Assists */
+    .assists-cluster {
+      display: flex;
+      align-items: center;
+      gap: 2.5px;
+    }
+    .assist-badge {
+      font-family: var(--f-mono);
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      padding: 1px 3.5px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.32);
+      transition: all 0.2s;
+    }
+    #badge-abs.active, .assist-badge.active.abs, .assist-badge.abs.active {
+      color: #ffffff;
+      background: rgba(241, 196, 15, 0.3);
+      border-color: #ffd32a;
+      box-shadow: 0 0 8px rgba(241, 196, 15, 0.6);
+      animation: assistBlink 0.35s infinite alternate;
+    }
+    #badge-tc.active, .assist-badge.active.tc, .assist-badge.tc.active {
+      color: #ffffff;
+      background: rgba(0, 229, 255, 0.3);
+      border-color: var(--c-cyan);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+      animation: assistBlink 0.35s infinite alternate;
+    }
+    #badge-tpms.active, .assist-badge.active.tpms, .assist-badge.tpms.active {
+      color: #ffffff;
+      background: rgba(229, 9, 20, 0.35);
+      border-color: var(--c-red-bright);
+      box-shadow: 0 0 10px rgba(229, 9, 20, 0.7);
+      animation: assistBlink 0.4s infinite alternate;
+    }
+    @keyframes assistBlink {
+      from { opacity: 0.8; }
+      to { opacity: 1; }
+    }
+
+    /* Flat Telltales */
+    .telltales-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .telltale-ico {
+      font-size: 10.5px;
+      color: rgba(255, 255, 255, 0.22);
+      transition: all 0.2s;
+    }
+    .telltale-ico.seatbelt.on,
+    .telltale-ico.seatbelt.unbuckled {
+      color: var(--c-red-bright);
+      filter: drop-shadow(0 0 6px var(--c-red-bright));
+      animation: seatbeltFlash 0.55s infinite alternate;
+    }
+    .telltale-ico.seatbelt.buckled {
+      color: #2ecc71;
+      filter: drop-shadow(0 0 6px rgba(46, 204, 113, 0.9));
+      animation: none;
+    }
+    .telltale-ico.lights.lights-low {
+      color: var(--c-green);
+      filter: drop-shadow(0 0 5px var(--c-green));
+    }
+    .telltale-ico.lights.lights-high {
+      color: var(--c-blue-high);
+      filter: drop-shadow(0 0 6px var(--c-blue-high));
+    }
+    .telltale-ico.handbrake.on {
+      color: var(--c-red-bright);
+      filter: drop-shadow(0 0 5px var(--c-red));
+    }
+    .telltale-ico.locked.on {
+      color: var(--c-amber);
+      filter: drop-shadow(0 0 5px var(--c-amber));
+    }
+    .telltale-ico.damage.on {
+      color: var(--c-amber);
+      filter: drop-shadow(0 0 4px var(--c-amber));
+    }
+    .telltale-ico.damage.critical {
+      color: var(--c-red-bright);
+      filter: drop-shadow(0 0 5px var(--c-red-bright));
+      animation: alertPulse 0.4s infinite alternate;
+    }
+
+    /* --- STANDALONE DEMO TOOLBAR --- */
+    #demo-toolbar {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      max-width: 65vw;
+      flex-wrap: wrap;
+      background: rgba(12, 14, 18, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 30px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 999;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      pointer-events: auto;
+    }
+    #demo-toolbar .logo-tag {
+      font-family: var(--f-brand);
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--c-red-bright);
+      letter-spacing: 1.2px;
+      margin-right: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .dbtn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+      font-family: var(--f-brand);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 3.5px 9px;
+      border-radius: 15px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dbtn:hover, .dbtn.active {
+      background: var(--c-red);
+      border-color: var(--c-red);
+      box-shadow: 0 0 8px var(--c-red-glow);
+    }
+
+    /* --- SPEEDOMETER DRAG & POSITIONING EDIT MODE --- */
+    body.edit-mode {
+      pointer-events: auto !important;
+    }
+    body.edit-mode #speedo-container {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      cursor: grab;
+      outline: 2px dashed rgba(229, 9, 20, 0.75);
+      outline-offset: 8px;
+      border-radius: 14px;
+      background: rgba(10, 14, 20, 0.45);
+      box-shadow: 0 0 25px rgba(229, 9, 20, 0.25);
+      transition: none !important;
+    }
+    body.edit-mode #speedo-container:active {
+      cursor: grabbing;
+      outline-color: #ff3344;
+      box-shadow: 0 0 35px rgba(229, 9, 20, 0.5);
+    }
+    #car-edit-mode-bar {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: rgba(14, 17, 22, 0.95);
+      border: 1px solid rgba(230, 33, 33, 0.5);
+      box-shadow: 0 10px 30px rgba(230, 33, 33, 0.35);
+      border-radius: 30px;
+      padding: 8px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #car-edit-mode-bar.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+    .car-edit-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .car-edit-title i {
+      color: var(--c-red-bright);
+    }
+    .car-edit-desc {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.65);
+      white-space: nowrap;
+    }
+    .car-edit-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .car-edit-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: var(--f-ui);
+      font-size: 11px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .car-edit-btn-reset {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .car-edit-btn-reset:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .car-edit-btn-save {
+      background: var(--c-red);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
+    }
+    .car-edit-btn-save:hover {
+      background: var(--c-red-bright);
+      box-shadow: 0 4px 16px rgba(255, 51, 68, 0.6);
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Car HUD Edit Mode Bar -->
+  <div id="car-edit-mode-bar">
+    <div class="car-edit-title"><i class="fa-solid fa-arrows-up-down-left-right"></i> DÉPLACEMENT SPEEDOMÈTRE</div>
+    <div class="car-edit-desc">Glissez le compteur pour l'ajuster à votre écran</div>
+    <div class="car-edit-actions">
+      <button class="car-edit-btn car-edit-btn-reset" id="btn-car-reset"><i class="fa-solid fa-rotate-left"></i> Réinitialiser</button>
+      <button class="car-edit-btn car-edit-btn-save" id="btn-car-save"><i class="fa-solid fa-check"></i> Terminer</button>
+    </div>
+  </div>
+
+  <!-- Standalone Backdrop (only outside FiveM) -->
+  <div id="standalone-backdrop" style="display:none;"></div>
+
+  <!-- Standalone Demo Toolbar -->
+  <div id="demo-toolbar" style="display:none;">
+    <span class="logo-tag"><i class="fa-solid fa-gauge-high"></i> BLOODLEAK PRO</span>
+    <button class="dbtn" id="btn-sim"><i class="fa-solid fa-play"></i> Simulation</button>
+    <button class="dbtn" id="btn-demo-carhud-move"><i class="fa-solid fa-arrows-up-down-left-right"></i> Déplacer</button>
+    <button class="dbtn" id="btn-cruise">Régulateur [Y]</button>
+    <button class="dbtn" id="btn-mode">Mode : SPORT</button>
+    <button class="dbtn" id="btn-turbo">Turbo</button>
+    <button class="dbtn" id="btn-abs">ABS</button>
+    <button class="dbtn" id="btn-tc">TC</button>
+    <button class="dbtn" id="btn-tpms">TPMS</button>
+    <button class="dbtn" id="btn-brake">Frein P</button>
+    <button class="dbtn" id="btn-belt">Ceinture</button>
+    <button class="dbtn" id="btn-lights">Phares</button>
+    <button class="dbtn" id="btn-fuel">Carburant</button>
+    <button class="dbtn" id="btn-engine">Moteur</button>
+    <button class="dbtn" id="btn-body">Santé</button>
+    <button class="dbtn" id="btn-turn">Clignotants</button>
+    <button class="dbtn" id="btn-scale">Échelle 1.0</button>
+    <button class="dbtn" id="btn-bg">Fond : Transparent</button>
+  </div>
+
+  <!-- Compteur -->
+  <!-- Overlay notifications HUD (auto-conduite, ceinture, etc.) -->
+  <div id="hud-notif-overlay"></div>
+
+  <div id="speedo-container">
+
+    <!-- ── LEFT SIDE: SPEEDOMETER & TACHOMETER CLUSTER ── -->
+    <div class="cockpit-left-cluster">
+      <!-- 1. Shift Lights GT3 Arc Ramp -->
+      <div class="shift-lights-ramp" id="shift-lights">
+        <div class="shift-led green" data-idx="0"></div>
+        <div class="shift-led green" data-idx="1"></div>
+        <div class="shift-led green" data-idx="2"></div>
+        <div class="shift-led green" data-idx="3"></div>
+        <div class="shift-led amber" data-idx="4"></div>
+        <div class="shift-led amber" data-idx="5"></div>
+        <div class="shift-led amber" data-idx="6"></div>
+        <div class="shift-led red"   data-idx="7"></div>
+        <div class="shift-led red"   data-idx="8"></div>
+        <div class="shift-led red"   data-idx="9"></div>
+      </div>
+
+      <!-- 2. Sculpted Speedometer Dial (236px) -->
+      <div class="speedo-dial-wrapper">
+        <div class="dial-smoked-disc"></div>
+
+        <svg class="dial-svg" viewBox="0 0 236 236" id="dial-svg">
+          <defs>
+            <linearGradient id="rpmColorGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ffffff"/>
+              <stop offset="35%" stop-color="#00e5ff"/>
+              <stop offset="70%" stop-color="#f1c40f"/>
+              <stop offset="88%" stop-color="#e62121"/>
+              <stop offset="100%" stop-color="#ff3838"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Background Track -->
+          <path id="arc-bg" class="arc-bg-track" />
+
+          <!-- Concentric Dashed Ring -->
+          <path id="arc-inner-dash" class="arc-inner-dash" />
+
+          <!-- Precision Laser Ticks -->
+          <g id="ticks-group"></g>
+
+          <!-- Tachometer RPM Numbers (0 to 9) -->
+          <g id="rpm-numbers-group"></g>
+
+          <!-- Redline Zone Track (last 18%) -->
+          <path id="arc-redline" class="arc-redline-track" />
+
+          <!-- Active Progress Arc -->
+          <path id="arc-prog" class="arc-rpm-progress" />
+
+          <!-- Needle Bead -->
+          <circle id="needle-dot" class="needle-dot" r="4.5" />
+        </svg>
+
+        <!-- Center Digital Cockpit -->
+        <div class="dial-center">
+          <div class="prnd-strip" id="prnd-strip">
+            <span data-g="P" class="active">P</span>
+            <span data-g="R">R</span>
+            <span data-g="N">N</span>
+            <span data-g="D">D</span>
+          </div>
+          <div class="gear-turn-row">
+            <div class="turn-indicator-pod left" id="turn-left" title="Clignotant Gauche [Touche Flèche Gauche ←]">
+              <i class="fa-solid fa-chevron-left turn-arrow-icon"></i>
+              <span class="turn-keycap">←</span>
+            </div>
+            <div class="gear-badge" id="gear-badge">P</div>
+            <div class="turn-indicator-pod right" id="turn-right" title="Clignotant Droit [Touche Flèche Droite →]">
+              <span class="turn-keycap">→</span>
+              <i class="fa-solid fa-chevron-right turn-arrow-icon"></i>
+            </div>
+          </div>
+          <div class="speed-number" id="speed-val"><span class="dim">0</span><span class="dim">0</span>0</div>
+          <div class="speed-unit" id="speed-unit">KM/H</div>
+          <div class="dial-cruise-pill" id="dial-cruise-pill" style="display:none;" title="Régulateur : Ajuster avec [PAGE UP] / [PAGE DOWN]"><i class="fa-solid fa-gauge"></i> <span id="dial-cruise-val">110 KM/H</span> <span class="dial-cruise-keys" title="Touches [PAGE UP] / [PAGE DOWN]"><i class="fa-solid fa-caret-up"></i><i class="fa-solid fa-caret-down"></i></span></div>
+          <div class="rpm-telemetry" id="rpm-telemetry"><span class="rpm-dot"></span><span id="rpm-tele-val">0.8</span>k TR/MIN</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RIGHT SIDE: HIGH-LEGIBILITY TELEMETRY CONSOLE ── -->
+    <div class="cockpit-right-console telemetry-dock" id="telemetry-dock">
+
+      <!-- 1. Header: Vehicle Name, Mode, Cruise & AutoDrive -->
+      <div class="console-header-row" id="cockpit-header">
+        <div class="console-title-group">
+          <div class="vehicle-spotlight-plaque" id="vehicle-plaque" title="Véhicule actuel">
+            <i class="fa-solid fa-car-rear vehicle-brand-badge"></i>
+            <span class="vehicle-title" id="vehicle-name">PFISTER COMET S2</span>
+          </div>
+          <span class="drive-mode-badge sport" id="drive-mode-pill">SPORT</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
+          <div class="cruise-badge" id="cruise-pill" title="Régulateur de vitesse (Touche [Y] | Ajuster : [PAGE UP] / [PAGE DOWN])">
+            <i class="fa-solid fa-gauge"></i>
+            <span class="cruise-title" id="cruise-title">RÉG.</span>
+            <span class="cruise-key-cap" id="cruise-key-cap">[Y]</span>
+            <div class="cruise-speed-cluster">
+              <span class="cruise-adjust-pip pip-up" id="cruise-btn-up" title="Augmenter (+5 km/h) [PAGE UP]"><i class="fa-solid fa-caret-up"></i></span>
+              <span class="cruise-val" id="cruise-val">ARRÊT</span>
+              <span class="cruise-adjust-pip pip-down" id="cruise-btn-down" title="Diminuer (-5 km/h) [PAGE DOWN]"><i class="fa-solid fa-caret-down"></i></span>
+            </div>
+          </div>
+          <div class="autodrive-badge" id="autodrive-badge" title="Auto-Conduite VIP/Staff — Touche [G]">
+            <i class="fa-solid fa-robot"></i>
+            <span id="autodrive-label">AUTO</span>
+            <span class="cruise-key-cap" id="autodrive-key-cap">[G]</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Turbo Boost Telemetry (Large, Legible, Crisp) -->
+      <div class="console-turbo-panel" id="turbo-panel">
+        <div class="turbo-panel-header">
+          <div class="turbo-tag">
+            <i class="fa-solid fa-gauge-simple-high"></i>
+            <span>PRESSION TURBO</span>
+            <span class="turbo-state-pill vac" id="turbo-state-pill">DÉPR.</span>
+          </div>
+          <div class="turbo-val-group">
+            <span class="val" id="turbo-val">-0.50 <small id="turbo-unit-tag">BAR</small></span>
+            <span class="peak">MAX <span id="turbo-pk-val">+0.00</span></span>
+          </div>
+        </div>
+
+        <div class="turbo-laser-track">
+          <!-- Vacuum Side: -1.0 to 0.0 BAR -->
+          <div class="turbo-vac-side">
+            <div class="turbo-vac-fill" id="turbo-vac-fill" style="width: 50%;"></div>
+          </div>
+          <!-- Boost Side: 0.0 to +2.0 BAR -->
+          <div class="turbo-boost-side">
+            <div class="turbo-boost-fill" id="turbo-boost-fill" style="width: 0%;"></div>
+          </div>
+          <!-- Peak Hold Pip -->
+          <div class="turbo-peak-pip" id="turbo-peak-pip" style="left: 33.33%;"></div>
+        </div>
+
+        <!-- Motorsport graduation scale ticks -->
+        <div class="turbo-ticks-scale">
+          <span>-1.0</span>
+          <span>-0.5</span>
+          <span class="center-zero">0.0</span>
+          <span>+1.0</span>
+          <span>+2.0 BAR</span>
+        </div>
+      </div>
+
+      <!-- 3. Fuel & Engine Health Metrics (High-Legibility Grid) -->
+      <div class="console-metrics-grid">
+        <!-- Fuel Block -->
+        <div class="metric-card fuel" id="bar-fuel-group">
+          <div class="metric-card-top">
+            <div class="metric-label-group">
+              <i class="fa-solid fa-gas-pump icon-fuel"></i>
+              <span class="metric-label">ESSENCE</span>
+            </div>
+            <div class="metric-value-group">
+              <span class="metric-val" id="val-fuel">85</span><small>%</small>
+            </div>
+          </div>
+          <div class="stat-track"><div class="stat-fill" id="bar-fuel-fill" style="width: 85%;"></div></div>
+          <div class="metric-card-sub">
+            <i class="fa-solid fa-route"></i> <span id="val-range">408 KM</span>
+          </div>
+        </div>
+
+        <!-- Engine Block -->
+        <div class="metric-card engine" id="bar-engine-group">
+          <div class="metric-card-top">
+            <div class="metric-label-group">
+              <i class="fa-solid fa-wrench icon-engine"></i>
+              <span class="metric-label">MOTEUR</span>
+            </div>
+            <div class="metric-value-group">
+              <span class="metric-val" id="val-engine">100</span><small>%</small>
+            </div>
+          </div>
+          <div class="stat-track"><div class="stat-fill" id="bar-engine-fill" style="width: 100%;"></div></div>
+          <div class="metric-card-sub">
+            <i class="fa-solid fa-temperature-three-quarters"></i> <span id="val-temp">90</span>°C
+          </div>
+        </div>
+
+        <!-- Vehicle Body / Overall Health Block (État du Véhicule) -->
+        <div class="metric-card body" id="bar-body-group">
+          <div class="metric-card-top">
+            <div class="metric-label-group">
+              <i class="fa-solid fa-car-side icon-body"></i>
+              <span class="metric-label">SANTÉ</span>
+            </div>
+            <div class="metric-value-group">
+              <span class="metric-val" id="val-body">100</span><small>%</small>
+            </div>
+          </div>
+          <div class="stat-track"><div class="stat-fill" id="bar-body-fill" style="width: 100%;"></div></div>
+          <div class="metric-card-sub">
+            <i class="fa-solid fa-shield-halved"></i> <span id="val-body-status">OPTIMAL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Footer: Odometer, Assists & Telltales -->
+      <div class="console-footer-row">
+        <div class="odo-cluster">
+          <span>ODO <span id="odo-val">14,892</span> KM</span>
+          <span class="dot-sep">•</span>
+          <span>TRAJET <span id="trip-val">12.4</span></span>
+        </div>
+
+        <div class="assists-cluster">
+          <span class="assist-badge abs" id="badge-abs" title="ABS (Système antiblocage) : actif automatiquement lors des freinages d'urgence">ABS</span>
+          <span class="assist-badge tc" id="badge-tc" title="TC (Traction Control) : actif automatiquement lors du patinage ou perte d'adhérence">TC</span>
+          <span class="assist-badge tpms" id="badge-tpms" title="TPMS (Tyre Pressure Monitoring) : alerte automatique en cas de crevaison">TPMS</span>
+        </div>
+
+        <div class="telltales-group">
+          <i class="fa-solid fa-car-burst telltale-ico damage" id="ico-damage" title="État santé / Dégâts véhicule"></i>
+          <i class="fa-solid fa-parking telltale-ico handbrake" id="ico-brake" title="Frein de parking"></i>
+          <i class="fa-solid fa-user-slash telltale-ico seatbelt unbuckled" id="ico-belt" title="Ceinture : DÉTACHÉE (Touche [B])"></i>
+          <i class="fa-solid fa-lightbulb telltale-ico lights" id="ico-lights" title="Phares"></i>
+          <i class="fa-solid fa-lock telltale-ico locked" id="ico-lock" title="Verrouillé"></i>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    /* --- CALCUL DES CADRANS · ARC DE 270° (135° → 45°) --- */
+    const CX = 118;
+    const CY = 118;
+    const R = 96;
+    const START_DEG = 135;
+    const SWEEP_DEG = 270;
+    const ARC_LEN = 2 * Math.PI * R * (SWEEP_DEG / 360); // ≈ 452.39
+
+    function polarToCartesian(cx, cy, r, angleDeg) {
+      const rad = (angleDeg * Math.PI) / 180;
+      return {
+        x: cx + r * Math.cos(rad),
+        y: cy + r * Math.sin(rad)
+      };
+    }
+
+    function describeArc(cx, cy, r, startDeg, sweepDeg) {
+      const start = polarToCartesian(cx, cy, r, startDeg);
+      const end = polarToCartesian(cx, cy, r, startDeg + sweepDeg);
+      const largeArc = sweepDeg > 180 ? 1 : 0;
+      return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+    }
+
+    // Initialize SVG Paths
+    const arcBg = document.getElementById('arc-bg');
+    const arcRedline = document.getElementById('arc-redline');
+    const arcProg = document.getElementById('arc-prog');
+    const needleDot = document.getElementById('needle-dot');
+    const arcInnerDash = document.getElementById('arc-inner-dash');
+    const ticksGroup = document.getElementById('ticks-group');
+    const rpmNumbersGroup = document.getElementById('rpm-numbers-group');
+
+    // 1. Full Arc
+    const fullD = describeArc(CX, CY, R, START_DEG, SWEEP_DEG);
+    arcBg.setAttribute('d', fullD);
+
+    // 2. Redline Zone Arc (last 18% of tachometer)
+    const redlineStartDeg = START_DEG + SWEEP_DEG * 0.82;
+    const redlineSweepDeg = SWEEP_DEG * 0.18;
+    arcRedline.setAttribute('d', describeArc(CX, CY, R, redlineStartDeg, redlineSweepDeg));
+
+    // 3. Progress Arc
+    arcProg.setAttribute('d', fullD);
+    arcProg.style.strokeDasharray = ARC_LEN.toFixed(2);
+    arcProg.style.strokeDashoffset = ARC_LEN.toFixed(2);
+
+    // 4. Concentric Inner Dashed Ring
+    arcInnerDash.setAttribute('d', describeArc(CX, CY, 84, START_DEG, SWEEP_DEG));
+
+    // 5. Precision Laser Ticks (33 ticks)
+    const ns = 'http://www.w3.org/2000/svg';
+    const TOTAL_TICKS = 33;
+    for (let i = 0; i < TOTAL_TICKS; i++) {
+      const deg = START_DEG + (i / (TOTAL_TICKS - 1)) * SWEEP_DEG;
+      const isMajor = i % 4 === 0;
+      const isRedline = i >= 26;
+
+      const rOut = 108;
+      const rIn = isMajor ? 98 : 102;
+      const p1 = polarToCartesian(CX, CY, rOut, deg);
+      const p2 = polarToCartesian(CX, CY, rIn, deg);
+
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', p1.x.toFixed(2));
+      line.setAttribute('y1', p1.y.toFixed(2));
+      line.setAttribute('x2', p2.x.toFixed(2));
+      line.setAttribute('y2', p2.y.toFixed(2));
+
+      let cls = 'tick-laser';
+      if (isMajor) cls += ' major';
+      if (isRedline) cls += ' redline';
+      line.setAttribute('class', cls);
+      ticksGroup.appendChild(line);
+    }
+
+    // 6. Tachometer Numbers 0 to 9
+    const rpmNumEls = [];
+    for (let i = 0; i <= 9; i++) {
+      const deg = START_DEG + (i / 9) * SWEEP_DEG;
+      const pos = polarToCartesian(CX, CY, 72, deg);
+      const text = document.createElementNS(ns, 'text');
+      text.setAttribute('x', pos.x.toFixed(2));
+      text.setAttribute('y', pos.y.toFixed(2));
+      text.setAttribute('class', 'rpm-num' + (i >= 8 ? ' redline' : ''));
+      text.textContent = i;
+      rpmNumbersGroup.appendChild(text);
+      rpmNumEls.push(text);
+    }
+
+    // 7. Needle Dot Initial Position
+    const initNeedlePos = polarToCartesian(CX, CY, R, START_DEG);
+    needleDot.setAttribute('cx', initNeedlePos.x.toFixed(2));
+    needleDot.setAttribute('cy', initNeedlePos.y.toFixed(2));
+
+    /* --- SONS (WEB AUDIO API) --- */
+    const CockpitAudio = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) this.ctx = new AC();
+        }
+      },
+      tone(freq, type, duration, vol = 0.04) {
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+      },
+      seatbeltBuckle() {
+        this.tone(650, 'sine', 0.05);
+        setTimeout(() => this.tone(880, 'sine', 0.07), 50);
+      },
+      seatbeltUnbuckle() {
+        this.tone(880, 'sine', 0.05);
+        setTimeout(() => this.tone(550, 'sine', 0.08), 50);
+      },
+      cruiseEngage() {
+        this.tone(660, 'sine', 0.05, 0.04);
+        setTimeout(() => this.tone(920, 'sine', 0.08, 0.04), 45);
+      },
+      cruiseDisengage() {
+        this.tone(920, 'sine', 0.05, 0.04);
+        setTimeout(() => this.tone(660, 'sine', 0.07, 0.04), 45);
+      },
+      blinkerTick() {
+        this.tone(1150, 'triangle', 0.022, 0.035);
+      },
+      blinkerTock() {
+        this.tone(820, 'triangle', 0.022, 0.025);
+      }
+    };
+
+    /* --- DOM & HUD CONTROLLER --- */
+    const $ = id => document.getElementById(id);
+    const UI = {
+      root: document.documentElement,
+      container: $('speedo-container'),
+      cockpitHeader: $('cockpit-header'),
+      driveModePill: $('drive-mode-pill'),
+      vehicleName: $('vehicle-name'),
+      cruisePill: $('cruise-pill'),
+      cruiseKeyCap: $('cruise-key-cap'),
+      cruiseVal: $('cruise-val'),
+      cruiseBtnUp: $('cruise-btn-up'),
+      cruiseBtnDown: $('cruise-btn-down'),
+      dialCruisePill: $('dial-cruise-pill'),
+      dialCruiseVal: $('dial-cruise-val'),
+      shiftLeds: [...document.querySelectorAll('#shift-lights .shift-led')],
+      speedVal: $('speed-val'),
+      speedUnit: $('speed-unit'),
+      gearBadge: $('gear-badge'),
+      prndSpans: [...document.querySelectorAll('#prnd-strip span')],
+      rpmTeleVal: $('rpm-tele-val'),
+      turnLeft: $('turn-left'),
+      turnRight: $('turn-right'),
+      arcProg: $('arc-prog'),
+      needleDot: $('needle-dot'),
+
+      // Turbo Boost
+      turboPanel: $('turbo-panel'),
+      turboStatePill: $('turbo-state-pill'),
+      turboVal: $('turbo-val'),
+      turboPkVal: $('turbo-pk-val'),
+      turboVacFill: $('turbo-vac-fill'),
+      turboBoostFill: $('turbo-boost-fill'),
+      turboPeakPip: $('turbo-peak-pip'),
+      turboUnitTag: $('turbo-unit-tag'),
+
+      // Fuel, Engine & Body
+      barFuelGroup: $('bar-fuel-group'),
+      barFuelFill: $('bar-fuel-fill'),
+      valFuel: $('val-fuel'),
+      valRange: $('val-range'),
+      barEngineGroup: $('bar-engine-group'),
+      barEngineFill: $('bar-engine-fill'),
+      valEngine: $('val-engine'),
+      valTemp: $('val-temp'),
+      barBodyGroup: $('bar-body-group'),
+      barBodyFill: $('bar-body-fill'),
+      valBody: $('val-body'),
+      valBodyStatus: $('val-body-status'),
+
+      // Footer
+      odoVal: $('odo-val'),
+      tripVal: $('trip-val'),
+      badgeAbs: $('badge-abs'),
+      badgeTc: $('badge-tc'),
+      badgeTpms: $('badge-tpms'),
+      icoDamage: $('ico-damage'),
+      icoBrake: $('ico-brake'),
+      icoBelt: $('ico-belt'),
+      icoLights: $('ico-lights'),
+      icoLock: $('ico-lock'),
+      demoBar: $('demo-toolbar')
+    };
+
+    let isVisible = false;
+    let lastGear = '';
+    let peakTurboVal = 0.0;
+    let peakTurboDecayTimer = null;
+
+    function setVisibility(show, scale) {
+      isVisible = !!show;
+      if (scale && typeof scale === 'number') {
+        UI.root.style.setProperty('--hud-scale', scale);
+      }
+      UI.container.classList.toggle('active', isVisible);
+    }
+
+    function formatSpeed(val) {
+      const s = Math.max(0, Math.min(999, Math.round(Number(val) || 0)));
+      const str = s.toString().padStart(3, '0');
+      let html = '';
+      let isLit = false;
+      for (let i = 0; i < 3; i++) {
+        if (str[i] !== '0' || i === 2) isLit = true;
+        html += isLit ? `<span>${str[i]}</span>` : `<span class="dim">${str[i]}</span>`;
+      }
+      return html;
+    }
+
+    /* SHIFT LIGHTS UPDATE */
+    function updateShiftLights(rpmRatio) {
+      const r = Math.max(0, Math.min(1, rpmRatio || 0));
+      const totalLeds = UI.shiftLeds.length;
+      const isLimiter = r >= 0.94;
+
+      const startThreshold = 0.58;
+      const effectiveRatio = r < startThreshold ? 0 : (r - startThreshold) / (1 - startThreshold);
+      const litCount = Math.floor(effectiveRatio * (totalLeds + 1));
+
+      UI.shiftLeds.forEach((led, idx) => {
+        if (isLimiter) {
+          led.className = 'shift-led limiter-flash';
+        } else {
+          const isGreen = idx < 4;
+          const isAmber = idx >= 4 && idx < 7;
+          const isRed = idx >= 7;
+          const typeCls = isGreen ? 'green' : (isAmber ? 'amber' : 'red');
+          const isOn = idx < litCount;
+          led.className = `shift-led ${typeCls}${isOn ? ' on' : ''}`;
+        }
+      });
+    }
+
+    /* TACHOMETER & NEEDLE UPDATE */
+    function updateRpm(ratio) {
+      const r = Math.max(0, Math.min(1, parseFloat(ratio) || 0));
+      const offset = ARC_LEN - r * ARC_LEN;
+      UI.arcProg.style.strokeDashoffset = offset.toFixed(2);
+
+      const isRedline = r >= 0.88;
+      UI.arcProg.classList.toggle('redline', isRedline);
+
+      // Needle position
+      const deg = START_DEG + r * SWEEP_DEG;
+      const pos = polarToCartesian(CX, CY, R, deg);
+      UI.needleDot.setAttribute('cx', pos.x.toFixed(2));
+      UI.needleDot.setAttribute('cy', pos.y.toFixed(2));
+      UI.needleDot.classList.toggle('redline', isRedline);
+
+      // Active RPM numbers
+      const activeIdx = Math.floor(r * 9);
+      rpmNumEls.forEach((el, idx) => {
+        el.classList.toggle('active', idx <= activeIdx);
+      });
+
+      if (UI.rpmTeleVal) {
+        UI.rpmTeleVal.textContent = (r * 8.5).toFixed(1);
+      }
+
+      updateShiftLights(r);
+    }
+
+    /* MISE À JOUR DU TURBO */
+    function updateTurbo(val, unit) {
+      const t = parseFloat(val) || 0.0;
+      const u = unit || 'BAR';
+
+      if (t > peakTurboVal) {
+        peakTurboVal = t;
+        if (peakTurboDecayTimer) clearTimeout(peakTurboDecayTimer);
+        peakTurboDecayTimer = setTimeout(() => {
+          peakTurboVal = Math.max(0, peakTurboVal - 0.25);
+        }, 1500);
+      }
+
+      const signStr = t >= 0 ? `+${t.toFixed(2)}` : t.toFixed(2);
+      if (UI.turboVal) {
+        UI.turboVal.innerHTML = `${signStr} <small id="turbo-unit-tag">${u}</small>`;
+      }
+      if (UI.turboPkVal) {
+        UI.turboPkVal.textContent = peakTurboVal >= 0 ? `+${peakTurboVal.toFixed(2)}` : `+0.00`;
+      }
+
+      if (UI.turboStatePill) {
+        let state = 'vac';
+        let stateText = 'DÉPR.';
+        if (t >= 1.5) {
+          state = 'peak';
+          stateText = 'MAX';
+        } else if (t >= 0.5) {
+          state = 'boost';
+          stateText = 'BOOST';
+        } else if (t > 0.0) {
+          state = 'spool';
+          stateText = 'CHARGE';
+        }
+        UI.turboStatePill.className = `turbo-state-pill ${state}`;
+        UI.turboStatePill.textContent = stateText;
+      }
+
+      // Dual-Polarity Track
+      if (t < 0) {
+        const vacPercent = Math.min(100, Math.max(0, (Math.abs(t) / 1.0) * 100));
+        if (UI.turboVacFill) UI.turboVacFill.style.width = `${vacPercent}%`;
+        if (UI.turboBoostFill) UI.turboBoostFill.style.width = '0%';
+      } else {
+        const boostPercent = Math.min(100, Math.max(0, (t / 2.0) * 100));
+        if (UI.turboVacFill) UI.turboVacFill.style.width = '0%';
+        if (UI.turboBoostFill) UI.turboBoostFill.style.width = `${boostPercent}%`;
+      }
+
+      if (UI.turboPeakPip) {
+        let pipLeft = 33.33;
+        if (peakTurboVal > 0) {
+          pipLeft = 33.33 + (Math.min(2.0, peakTurboVal) / 2.0) * 66.67;
+        }
+        UI.turboPeakPip.style.left = `${pipLeft.toFixed(1)}%`;
+      }
+    }
+
+    /* MISE À JOUR DU HUD */
+    function updateHUD(data) {
+      if (!data) return;
+      if (!isVisible) return;
+
+      // 1. Vehicle Name & Model
+      if (data.vehicleName && UI.vehicleName) {
+        UI.vehicleName.textContent = data.vehicleName;
+      }
+
+      // 2. Drive Mode
+      if (data.driveMode && UI.driveModePill) {
+        const m = String(data.driveMode).toUpperCase();
+        UI.driveModePill.textContent = m;
+        const norm = m.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        UI.driveModePill.className = `drive-mode-badge ${norm}`;
+      }
+
+      // 3. Cruise Control
+      if (data.cruise !== undefined && UI.cruisePill) {
+        if (data.cruiseKey && UI.cruiseKeyCap) {
+          UI.cruiseKeyCap.textContent = `[${data.cruiseKey}]`;
+        }
+        const isCruiseActive = (typeof data.cruise === 'number' && data.cruise > 0) || data.cruise === true;
+        UI.cruisePill.classList.toggle('active', isCruiseActive);
+
+        if (typeof data.cruise === 'number' && data.cruise > 0) {
+          const unit = (data.unit === 'MPH') ? 'MPH' : 'KM/H';
+          if (UI.cruiseVal) UI.cruiseVal.textContent = `${data.cruise} ${unit}`;
+          if (UI.dialCruisePill) {
+            UI.dialCruisePill.style.display = 'inline-flex';
+            if (UI.dialCruiseVal) UI.dialCruiseVal.textContent = `${data.cruise} ${unit}`;
+          }
+        } else if (data.cruise === true) {
+          if (UI.cruiseVal) UI.cruiseVal.textContent = 'ACTIF';
+          if (UI.dialCruisePill) {
+            UI.dialCruisePill.style.display = 'inline-flex';
+            if (UI.dialCruiseVal) UI.dialCruiseVal.textContent = 'ACTIF';
+          }
+        } else {
+          if (UI.cruiseVal) UI.cruiseVal.textContent = 'ARRÊT';
+          if (UI.dialCruisePill) {
+            UI.dialCruisePill.style.display = 'none';
+          }
+        }
+      }
+
+      // 4. Speed
+      if (data.speed !== undefined) {
+        UI.speedVal.innerHTML = formatSpeed(data.speed);
+      }
+
+      // 5. Unit
+      if (data.unit) {
+        UI.speedUnit.textContent = (data.unit === 'KMH' || data.unit === 'KM/H') ? 'KM/H' : 'MPH';
+      }
+
+      // 6. Gear & PRND
+      if (data.gear !== undefined) {
+        const g = String(data.gear).toUpperCase();
+        if (g !== lastGear) {
+          UI.gearBadge.textContent = g;
+          UI.gearBadge.classList.remove('pop');
+          void UI.gearBadge.offsetWidth;
+          UI.gearBadge.classList.add('pop');
+          lastGear = g;
+        }
+
+        let targetPrnd = 'D';
+        if (g === 'P') targetPrnd = 'P';
+        else if (g === 'R') targetPrnd = 'R';
+        else if (g === 'N') targetPrnd = 'N';
+
+        UI.prndSpans.forEach(sp => {
+          sp.classList.toggle('active', sp.getAttribute('data-g') === targetPrnd);
+        });
+      }
+
+      // 7. RPM
+      if (data.rpm !== undefined) {
+        updateRpm(data.rpm);
+      }
+
+      // 8. Turbo Boost
+      if (data.turbo !== undefined) {
+        updateTurbo(data.turbo, data.turboUnit || 'BAR');
+      }
+
+      // 9. Fuel & Range
+      if (data.fuel !== undefined) {
+        const fuel = Math.max(0, Math.min(100, Math.round(Number(data.fuel) || 0)));
+        if (UI.valFuel) UI.valFuel.textContent = fuel;
+        if (UI.barFuelFill) UI.barFuelFill.style.width = `${fuel}%`;
+        if (UI.barFuelGroup) UI.barFuelGroup.classList.toggle('alert', fuel <= 20);
+
+        if (UI.valRange) {
+          const rng = data.fuelRange !== undefined ? Math.round(data.fuelRange) : Math.round(fuel * 4.8);
+          UI.valRange.textContent = `${rng} KM`;
+        }
+      }
+
+      // 10. Engine Health & Temp
+      if (data.engine !== undefined) {
+        const eng = Math.max(0, Math.min(100, Math.round(Number(data.engine) || 0)));
+        if (UI.valEngine) UI.valEngine.textContent = eng;
+        if (UI.barEngineFill) UI.barEngineFill.style.width = `${eng}%`;
+        if (UI.barEngineGroup) UI.barEngineGroup.classList.toggle('alert', eng <= 40);
+      }
+      if (data.engineTemp !== undefined && UI.valTemp) {
+        UI.valTemp.textContent = Math.round(Number(data.engineTemp) || 90);
+      }
+
+      // 10b. Vehicle Body / Overall Health
+      if (data.body !== undefined) {
+        const body = Math.max(0, Math.min(100, Math.round(Number(data.body) || 0)));
+        if (UI.valBody) UI.valBody.textContent = body;
+        if (UI.barBodyFill) UI.barBodyFill.style.width = `${body}%`;
+        if (UI.barBodyGroup) UI.barBodyGroup.classList.toggle('alert', body <= 40);
+
+        if (UI.valBodyStatus) {
+          if (body >= 85) {
+            UI.valBodyStatus.textContent = 'OPTIMAL';
+            UI.valBodyStatus.style.color = '#a8ff78';
+          } else if (body >= 60) {
+            UI.valBodyStatus.textContent = 'BON ÉTAT';
+            UI.valBodyStatus.style.color = '#ffd32a';
+          } else if (body >= 35) {
+            UI.valBodyStatus.textContent = 'ENDOMMAGÉ';
+            UI.valBodyStatus.style.color = '#e67e22';
+          } else {
+            UI.valBodyStatus.textContent = 'CRITIQUE';
+            UI.valBodyStatus.style.color = '#ff4757';
+          }
+        }
+
+        if (UI.icoDamage) {
+          if (body <= 25) {
+            UI.icoDamage.className = 'fa-solid fa-car-burst telltale-ico damage critical';
+          } else if (body <= 60) {
+            UI.icoDamage.className = 'fa-solid fa-car-burst telltale-ico damage on';
+          } else {
+            UI.icoDamage.className = 'fa-solid fa-car-burst telltale-ico damage';
+          }
+        }
+      }
+
+      // 11. Safety Electronics (ABS, TC, TPMS)
+      if (data.abs !== undefined && UI.badgeAbs) {
+        UI.badgeAbs.classList.toggle('active', !!data.abs);
+      }
+      if (data.tc !== undefined && UI.badgeTc) {
+        UI.badgeTc.classList.toggle('active', !!data.tc);
+      }
+      if (data.tpms !== undefined && UI.badgeTpms) {
+        UI.badgeTpms.classList.toggle('active', !!data.tpms);
+      }
+
+      // 12. Odometer & Trip
+      if (data.odo !== undefined && UI.odoVal) {
+        const odoNum = Math.round(Number(data.odo) || 0);
+        UI.odoVal.textContent = odoNum.toLocaleString('en-US');
+      }
+      if (data.trip !== undefined && UI.tripVal) {
+        UI.tripVal.textContent = Number(data.trip).toFixed(1);
+      }
+
+      // 13. Telltales - Ceinture bicolore (Vert = Attachée, Rouge = Détachée)
+      if (data.seatbelt !== undefined && UI.icoBelt) {
+        if (data.seatbelt) {
+          UI.icoBelt.className = 'fa-solid fa-user-check telltale-ico seatbelt buckled';
+          UI.icoBelt.title = 'Ceinture : ATTACHÉE (Sécurisée)';
+        } else {
+          UI.icoBelt.className = 'fa-solid fa-user-slash telltale-ico seatbelt unbuckled';
+          UI.icoBelt.title = 'Ceinture : DÉTACHÉE (Touche [B])';
+        }
+      }
+      if (data.handbrake !== undefined && UI.icoBrake) {
+        UI.icoBrake.classList.toggle('on', !!data.handbrake);
+      }
+      if (data.locked !== undefined && UI.icoLock) {
+        UI.icoLock.classList.toggle('on', !!data.locked);
+      }
+      if (UI.icoLights) {
+        if (data.highbeams) {
+          UI.icoLights.className = 'fa-solid fa-lightbulb telltale-ico lights lights-high';
+        } else if (data.headlights) {
+          UI.icoLights.className = 'fa-solid fa-lightbulb telltale-ico lights lights-low';
+        } else {
+          UI.icoLights.className = 'fa-solid fa-lightbulb telltale-ico lights';
+        }
+      }
+
+      // 14. Blinkers (Clignotants avec indication et son)
+      if (data.leftBlinker !== undefined && UI.turnLeft) {
+        const wasOn = UI.turnLeft.classList.contains('on');
+        UI.turnLeft.classList.toggle('on', !!data.leftBlinker);
+        if (!wasOn && data.leftBlinker) CockpitAudio.blinkerTick();
+      }
+      if (data.rightBlinker !== undefined && UI.turnRight) {
+        const wasOn = UI.turnRight.classList.contains('on');
+        UI.turnRight.classList.toggle('on', !!data.rightBlinker);
+        if (!wasOn && data.rightBlinker && !data.leftBlinker) CockpitAudio.blinkerTick();
+      }
+
+      // 15. Auto-Drive Status
+      if (data.autoDrive !== undefined) {
+        const badge = document.getElementById('autodrive-badge');
+        const label = document.getElementById('autodrive-label');
+        const keyCap = document.getElementById('autodrive-key-cap');
+        if (badge) badge.classList.toggle('active', !!data.autoDrive);
+        if (label) label.textContent = data.autoDrive ? 'AUTO-PILOTE' : 'AUTO';
+        if (keyCap && data.autoDriveKey) keyCap.textContent = `[${data.autoDriveKey}]`;
+      }
+    }
+    window.updateHUD = updateHUD;
+
+    /* --- SPEEDOMETER POSITIONING & DRAG-AND-DROP SYSTEM --- */
+    let isCarEditModeActive = false;
+    let isFromPlayerHud = false;
+    let isCarDragging = false;
+    let carDragOffsetX = 0;
+    let carDragOffsetY = 0;
+    let customCarPos = null;
+
+    function applySpeedoPosition(left, top) {
+      if (typeof left === 'number' && typeof top === 'number') {
+        const rect = UI.container.getBoundingClientRect();
+        const w = rect.width || 460;
+        const h = rect.height || 240;
+        const boundedLeft = Math.max(10, Math.min(window.innerWidth - w - 10, left));
+        const boundedTop = Math.max(10, Math.min(window.innerHeight - h - 10, top));
+
+        UI.container.style.left = boundedLeft + 'px';
+        UI.container.style.top = boundedTop + 'px';
+        UI.container.style.right = 'auto';
+        UI.container.style.bottom = 'auto';
+        UI.container.style.transformOrigin = 'top left';
+        customCarPos = { left: boundedLeft, top: boundedTop };
+      }
+    }
+
+    function resetSpeedoPosition(save = true) {
+      customCarPos = null;
+      UI.container.style.left = '';
+      UI.container.style.top = '';
+      UI.container.style.right = '28px';
+      UI.container.style.bottom = '24px';
+      UI.container.style.transformOrigin = 'bottom right';
+      try {
+        localStorage.removeItem('bloodleak_carhud_position');
+        if (save) {
+          const resName = window.GetParentResourceName ? window.GetParentResourceName() : 'bl_hud_car';
+          fetch(`https://${resName}/savePosition`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true })
+          }).catch(() => {});
+        }
+      } catch (e) {}
+    }
+
+    function loadSpeedoPosition() {
+      try {
+        const saved = localStorage.getItem('bloodleak_carhud_position');
+        if (saved) {
+          const pos = JSON.parse(saved);
+          if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+            applySpeedoPosition(pos.left, pos.top);
+            return;
+          }
+        }
+      } catch (e) {}
+      resetSpeedoPosition(false);
+    }
+
+    function initCarDragAndDrop() {
+      UI.container.addEventListener('mousedown', (e) => {
+        if (!isCarEditModeActive) return;
+        e.preventDefault();
+        isCarDragging = true;
+        const rect = UI.container.getBoundingClientRect();
+        carDragOffsetX = e.clientX - rect.left;
+        carDragOffsetY = e.clientY - rect.top;
+        if (CockpitAudio && CockpitAudio.blinkerTick) CockpitAudio.blinkerTick();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isCarEditModeActive || !isCarDragging) return;
+        e.preventDefault();
+
+        const rect = UI.container.getBoundingClientRect();
+        let newX = e.clientX - carDragOffsetX;
+        let newY = e.clientY - carDragOffsetY;
+
+        newX = Math.max(10, Math.min(window.innerWidth - rect.width - 10, newX));
+        newY = Math.max(10, Math.min(window.innerHeight - rect.height - 10, newY));
+
+        UI.container.style.left = newX + 'px';
+        UI.container.style.top = newY + 'px';
+        UI.container.style.right = 'auto';
+        UI.container.style.bottom = 'auto';
+        UI.container.style.transformOrigin = 'top left';
+
+        customCarPos = { left: newX, top: newY };
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isCarDragging) {
+          isCarDragging = false;
+        }
+      });
+
+      const btnCarReset = $('btn-car-reset');
+      if (btnCarReset) {
+        btnCarReset.addEventListener('click', () => {
+          if (CockpitAudio && CockpitAudio.blinkerTick) CockpitAudio.blinkerTick();
+          resetSpeedoPosition(true);
+        });
+      }
+
+      const btnCarSave = $('btn-car-save');
+      if (btnCarSave) {
+        btnCarSave.addEventListener('click', () => {
+          finishCarEditMode();
+        });
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (isCarEditModeActive && (e.key === 'Escape' || e.key === 'Backspace')) {
+          finishCarEditMode();
+        }
+      });
+    }
+
+    function setCarEditMode(active, fromHud = false) {
+      isCarEditModeActive = !!active;
+      isFromPlayerHud = !!fromHud;
+      document.body.classList.toggle('edit-mode', isCarEditModeActive);
+      const bar = $('car-edit-mode-bar');
+      if (bar) bar.classList.toggle('active', isCarEditModeActive);
+
+      if (isCarEditModeActive) {
+        setVisibility(true);
+        if (!UI.speedVal.textContent || UI.speedVal.textContent.trim() === '000') {
+          updateHUD({
+            vehicleName: 'PFISTER COMET S2',
+            driveMode: 'SPORT',
+            speed: 120,
+            rpm: 0.65,
+            gear: '4',
+            fuel: 85,
+            engine: 100,
+            body: 100,
+            odo: 12450,
+            trip: 14.2
+          });
+        }
+      }
+    }
+
+    function finishCarEditMode() {
+      if (customCarPos) {
+        try {
+          localStorage.setItem('bloodleak_carhud_position', JSON.stringify(customCarPos));
+          const resName = window.GetParentResourceName ? window.GetParentResourceName() : 'bl_hud_car';
+          fetch(`https://${resName}/savePosition`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(customCarPos)
+          }).catch(() => {});
+        } catch (e) {}
+      }
+      setCarEditMode(false);
+      const resName = window.GetParentResourceName ? window.GetParentResourceName() : 'bl_hud_car';
+      fetch(`https://${resName}/closeEditMode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromPlayerHud: isFromPlayerHud })
+      }).catch(() => {});
+    }
+
+    /* --- FIVEM NUI LISTENER --- */
+    window.addEventListener('message', event => {
+      const d = event.data;
+      if (!d) return;
+
+      if (d.action === 'showSpeedo' || d.action === 'openSpeedo') {
+        const shouldShow = d.show !== undefined ? d.show : true;
+        const targetScale = d.scale || 1.0;
+        UI.root.style.setProperty('--hud-scale', targetScale);
+        setVisibility(shouldShow, targetScale);
+        if (d.unit) UI.speedUnit.textContent = (d.unit === 'KMH' || d.unit === 'KM/H') ? 'KM/H' : 'MPH';
+      } else if (d.action === 'updateSpeedo') {
+        updateHUD(d);
+      } else if (d.action === 'updateSeatbelt') {
+        if (d.buckled !== undefined) {
+          if (d.buckled) {
+            UI.icoBelt.className = 'fa-solid fa-user-check telltale-ico seatbelt buckled';
+            UI.icoBelt.title = 'Ceinture : ATTACHÉE (Sécurisée)';
+            if (d.playSound) CockpitAudio.seatbeltBuckle();
+          } else {
+            UI.icoBelt.className = 'fa-solid fa-user-slash telltale-ico seatbelt unbuckled';
+            UI.icoBelt.title = 'Ceinture : DÉTACHÉE (Touche [B])';
+            if (d.playSound) CockpitAudio.seatbeltUnbuckle();
+          }
+        }
+      } else if (d.action === 'playCruiseSound') {
+        if (d.status === 'on') {
+          CockpitAudio.cruiseEngage();
+        } else {
+          CockpitAudio.cruiseDisengage();
+        }
+      } else if (d.action === 'playBlinkerClick') {
+        CockpitAudio.blinkerTick();
+      } else if (d.action === 'updateAutoDrive') {
+        // Badge auto-conduite
+        const badge = document.getElementById('autodrive-badge');
+        const label = document.getElementById('autodrive-label');
+        const keyCap = document.getElementById('autodrive-key-cap');
+        if (badge) badge.classList.toggle('active', !!d.active);
+        if (label) label.textContent = d.active ? 'AUTO-PILOTE' : 'AUTO';
+        if (keyCap && d.key) keyCap.textContent = `[${d.key}]`;
+      } else if (d.action === 'hudNotif') {
+        // Notification centrée en haut du HUD
+        const overlay = document.getElementById('hud-notif-overlay');
+        if (!overlay) return;
+        const dur = (d.duration || 2500) / 1000;
+        const el = document.createElement('div');
+        el.className = 'hud-notif';
+        el.style.setProperty('--dur', `${dur}s`);
+        el.style.borderColor = d.color ? `${d.color}55` : 'rgba(255,255,255,0.12)';
+        el.style.color = d.color || '#ffffff';
+        el.textContent = d.text || '';
+        overlay.appendChild(el);
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, d.duration || 2500);
+      } else if (d.action === 'setEditMode') {
+        if (d.scale) UI.root.style.setProperty('--hud-scale', d.scale);
+        if (d.unit) UI.speedUnit.textContent = (d.unit === 'KMH' || d.unit === 'KM/H') ? 'KM/H' : 'MPH';
+        setCarEditMode(d.active, d.fromPlayerHud);
+      }
+    });
+
+    /* --- STANDALONE DEMO SUITE (Browser Testing) --- */
+    const isStandalone = !window.invokeNative && !window.GetParentResourceName &&
+      (location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+    if (isStandalone) {
+      UI.demoBar.style.display = 'flex';
+      const backdrop = $('standalone-backdrop');
+      if (backdrop) {
+        backdrop.style.display = 'block';
+        backdrop.className = 'preview-trans';
+      }
+      setVisibility(true, 1.0);
+
+      const sim = {
+        vehicleName: 'PFISTER COMET S2',
+        driveMode: 'SPORT',
+        cruise: false,
+        speed: 142,
+        rpm: 0.68,
+        gear: '3',
+        turbo: 0.85,
+        engineTemp: 92,
+        abs: false,
+        tc: false,
+        tpms: false,
+        odo: 14892,
+        trip: 12.4,
+        fuel: 85,
+        fuelRange: 408,
+        engine: 100,
+        body: 100,
+        seatbelt: false,
+        headlights: true,
+        highbeams: false,
+        locked: false,
+        handbrake: false,
+        leftBlinker: false,
+        rightBlinker: false,
+        unit: 'KM/H'
+      };
+      updateHUD(sim);
+
+      let simActive = false;
+      let simTimer = null;
+      let turnState = 0;
+      const modes = ['CONFORT', 'SPORT', 'CIRCUIT', 'CROISIÈRE', 'DRIFT'];
+      let mIdx = 1;
+      const bgThemes = ['preview-trans', 'preview-dark', 'preview-day'];
+      const bgNames = ['Fond : Transparent', 'Fond : Nuit', 'Fond : Jour'];
+      let bgIdx = 0;
+
+      // 1. Simulation Toggle (GT3 Acceleration & Braking)
+      $('btn-sim').addEventListener('click', () => {
+        if (simActive) {
+          clearInterval(simTimer);
+          simActive = false;
+          $('btn-sim').classList.remove('active');
+          return;
+        }
+        simActive = true;
+        $('btn-sim').classList.add('active');
+        let t = 0;
+
+        simTimer = setInterval(() => {
+          t += 0.05;
+          const c = t % 14;
+          let spd = 0, rpm = 0.15, gear = '1', turbo = -0.5, dMode = 'SPORT', abs = false, tc = false;
+
+          if (c < 2.0) {
+            // Gear 1
+            gear = '1';
+            const progress = c / 2.0;
+            rpm = 0.25 + progress * 0.72;
+            spd = progress * 56;
+            turbo = -0.2 + progress * 1.4;
+            dMode = 'SPORT';
+            tc = progress > 0.2 && progress < 0.5;
+          } else if (c < 4.5) {
+            // Gear 2
+            gear = '2';
+            const progress = (c - 2.0) / 2.5;
+            rpm = 0.40 + progress * 0.58;
+            spd = 56 + progress * 62;
+            turbo = 0.8 + progress * 0.9;
+            dMode = 'SPORT';
+          } else if (c < 7.5) {
+            // Gear 3
+            gear = '3';
+            const progress = (c - 4.5) / 3.0;
+            rpm = 0.48 + progress * 0.51;
+            spd = 118 + progress * 70;
+            turbo = 1.3 + progress * 0.55;
+            dMode = 'CIRCUIT';
+          } else if (c < 10.5) {
+            // Gear 4
+            gear = '4';
+            const progress = (c - 7.5) / 3.0;
+            rpm = 0.55 + progress * 0.43;
+            spd = 188 + progress * 72;
+            turbo = 1.5;
+            dMode = 'DRIFT';
+            tc = true;
+          } else {
+            // Heavy Braking with ABS
+            gear = '2';
+            const progress = (c - 10.5) / 3.5;
+            rpm = Math.max(0.18, 0.80 - progress * 0.62);
+            spd = Math.max(20, 260 - progress * 240);
+            turbo = -0.8;
+            abs = (progress > 0.1 && progress < 0.7);
+            dMode = 'CONFORT';
+          }
+
+          sim.trip = +(sim.trip + (spd * 0.05 / 3600)).toFixed(1);
+          sim.odo = Math.round(14892 + sim.trip);
+
+          updateHUD({
+            vehicleName: 'PFISTER COMET S2',
+            driveMode: dMode,
+            speed: Math.round(spd),
+            rpm: rpm,
+            gear: gear,
+            turbo: turbo,
+            engineTemp: Math.min(108, Math.round(88 + (spd / 260) * 18)),
+            abs: abs,
+            tc: tc,
+            tpms: sim.tpms,
+            odo: sim.odo,
+            trip: sim.trip,
+            fuel: 78,
+            fuelRange: 374,
+            engine: 100,
+            seatbelt: sim.seatbelt,
+            headlights: sim.headlights,
+            highbeams: sim.highbeams,
+            leftBlinker: c < 2.5,
+            rightBlinker: c > 7.0 && c < 9.5,
+            handbrake: false,
+            unit: 'KM/H'
+          });
+        }, 50);
+      });
+
+      // 1b. Cruise Control Toggle
+      const btnCruise = $('btn-cruise');
+      if (btnCruise) {
+        btnCruise.addEventListener('click', () => {
+          sim.cruise = sim.cruise ? false : 120;
+          if (sim.cruise) {
+            sim.driveMode = 'CROISIÈRE';
+          } else {
+            sim.driveMode = 'CONFORT';
+          }
+          $('btn-mode').textContent = `Mode : ${sim.driveMode}`;
+          btnCruise.classList.toggle('active', !!sim.cruise);
+          updateHUD(sim);
+        });
+      }
+
+      // 2. Drive Mode Cycle
+      $('btn-mode').addEventListener('click', () => {
+        mIdx = (mIdx + 1) % modes.length;
+        sim.driveMode = modes[mIdx];
+        $('btn-mode').textContent = `Mode : ${sim.driveMode}`;
+        updateHUD(sim);
+      });
+
+      // 3. Turbo Bump Toggle
+      $('btn-turbo').addEventListener('click', () => {
+        sim.turbo = sim.turbo >= 1.6 ? -0.6 : 1.85;
+        updateHUD(sim);
+      });
+
+      // 4. ABS Toggle
+      $('btn-abs').addEventListener('click', () => {
+        sim.abs = !sim.abs;
+        $('btn-abs').classList.toggle('active', sim.abs);
+        updateHUD(sim);
+      });
+
+      // 5. TC Toggle
+      $('btn-tc').addEventListener('click', () => {
+        sim.tc = !sim.tc;
+        $('btn-tc').classList.toggle('active', sim.tc);
+        updateHUD(sim);
+      });
+
+      // 6. TPMS Toggle
+      $('btn-tpms').addEventListener('click', () => {
+        sim.tpms = !sim.tpms;
+        $('btn-tpms').classList.toggle('active', sim.tpms);
+        updateHUD(sim);
+      });
+
+      // 7. Handbrake Toggle
+      $('btn-brake').addEventListener('click', () => {
+        sim.handbrake = !sim.handbrake;
+        $('btn-brake').classList.toggle('active', sim.handbrake);
+        updateHUD(sim);
+      });
+
+      // 8. Seatbelt Toggle
+      $('btn-belt').addEventListener('click', () => {
+        sim.seatbelt = !sim.seatbelt;
+        sim.seatbelt ? CockpitAudio.seatbeltBuckle() : CockpitAudio.seatbeltUnbuckle();
+        updateHUD(sim);
+      });
+
+      // 9. Lights Toggle
+      $('btn-lights').addEventListener('click', () => {
+        if (!sim.headlights && !sim.highbeams) sim.headlights = true;
+        else if (sim.headlights && !sim.highbeams) sim.highbeams = true;
+        else { sim.headlights = false; sim.highbeams = false; }
+        updateHUD(sim);
+      });
+
+      // 10. Fuel Toggle
+      $('btn-fuel').addEventListener('click', () => {
+        sim.fuel = sim.fuel > 20 ? 14 : 85;
+        sim.fuelRange = Math.round(sim.fuel * 4.8);
+        updateHUD(sim);
+      });
+
+      // 11. Engine Toggle
+      $('btn-engine').addEventListener('click', () => {
+        sim.engine = sim.engine > 40 ? 28 : 100;
+        updateHUD(sim);
+      });
+
+      // 11b. Body / Vehicle Health Toggle
+      const btnBody = $('btn-body');
+      if (btnBody) {
+        btnBody.addEventListener('click', () => {
+          sim.body = sim.body === 100 ? 60 : (sim.body === 60 ? 20 : 100);
+          btnBody.classList.toggle('active', sim.body < 100);
+          updateHUD(sim);
+        });
+      }
+
+      // 12. Turn Signals Toggle
+      $('btn-turn').addEventListener('click', () => {
+        turnState = (turnState + 1) % 4;
+        sim.leftBlinker = turnState === 1 || turnState === 3;
+        sim.rightBlinker = turnState === 2 || turnState === 3;
+        updateHUD(sim);
+      });
+
+      // 13. Scale Toggle
+      const scales = [1.0, 1.1, 1.2, 0.9, 0.85];
+      let sIdx = 0;
+      $('btn-scale').addEventListener('click', () => {
+        sIdx = (sIdx + 1) % scales.length;
+        const sc = scales[sIdx];
+        UI.root.style.setProperty('--hud-scale', sc);
+        $('btn-scale').textContent = `Échelle ${sc.toFixed(2)}`;
+      });
+
+      // 14. Background Switcher
+      $('btn-bg').addEventListener('click', () => {
+        bgIdx = (bgIdx + 1) % bgThemes.length;
+        if (backdrop) backdrop.className = bgThemes[bgIdx];
+        $('btn-bg').textContent = bgNames[bgIdx];
+      });
+
+      // 15. Direct interactive element clicks (HUD on-screen interactions)
+      if (UI.turnLeft) {
+        UI.turnLeft.addEventListener('click', () => {
+          sim.leftBlinker = !sim.leftBlinker;
+          if (sim.leftBlinker) sim.rightBlinker = false;
+          CockpitAudio.blinkerTick();
+          updateHUD(sim);
+        });
+      }
+      if (UI.turnRight) {
+        UI.turnRight.addEventListener('click', () => {
+          sim.rightBlinker = !sim.rightBlinker;
+          if (sim.rightBlinker) sim.leftBlinker = false;
+          CockpitAudio.blinkerTick();
+          updateHUD(sim);
+        });
+      }
+      if (UI.cruiseBtnUp) {
+        UI.cruiseBtnUp.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!sim.cruise) sim.cruise = 110;
+          else if (typeof sim.cruise === 'number') sim.cruise = Math.min(300, sim.cruise + 5);
+          sim.driveMode = 'CROISIÈRE';
+          CockpitAudio.cruiseEngage();
+          updateHUD(sim);
+        });
+      }
+      if (UI.cruiseBtnDown) {
+        UI.cruiseBtnDown.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (typeof sim.cruise === 'number') sim.cruise = Math.max(30, sim.cruise - 5);
+          CockpitAudio.cruiseEngage();
+          updateHUD(sim);
+        });
+      }
+      if (UI.icoBelt) {
+        UI.icoBelt.addEventListener('click', () => {
+          sim.seatbelt = !sim.seatbelt;
+          sim.seatbelt ? CockpitAudio.seatbeltBuckle() : CockpitAudio.seatbeltUnbuckle();
+          updateHUD(sim);
+        });
+      }
+
+      // Demo Toolbar Move button
+      const btnDemoMove = $('btn-demo-carhud-move');
+      if (btnDemoMove) {
+        btnDemoMove.addEventListener('click', () => {
+          setCarEditMode(!isCarEditModeActive, false);
+          btnDemoMove.classList.toggle('active', isCarEditModeActive);
+        });
+      }
+    }
+
+    // Initialize saved speedo coordinates and drag-and-drop listener
+    loadSpeedoPosition();
+    initCarDragAndDrop();
+  </script>
+</body>
+</html>

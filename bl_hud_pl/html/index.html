@@ -1,0 +1,4845 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>BloodLeak HUD - Clean Transparent Edition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Outfit:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <style>
+    /* --- RESET & THEME --- */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    :root {
+      --c-red: #e62121;
+      --c-cash: #2ecc71;
+      --c-bank: #74b9ff;
+      --c-dirty: #ff4757;
+      --c-society: #f1c40f;
+      --c-online: #2ecc71;
+      --c-fps: #00cec9;
+      
+      /* Liquid Colors */
+      --c-hp: #e74c3c;
+      --c-ar: #00cec9; 
+      --c-fd: #e67e22;
+      --c-wt: #0984e3;
+      --c-st: #8e44ad;
+      --c-stm: #f1c40f;
+      --c-ox: #6c5ce7;
+      --c-radio: #00cec9;
+
+      /* Balanced Premium Opacity */
+      --glass-bg: rgba(14, 18, 24, 0.78);
+      --glass-border: rgba(255, 255, 255, 0.15);
+      --glass-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+      
+      --hud-scale: 1.0;
+      --font-main: 'Montserrat', sans-serif;
+
+      /* Ancrage dynamique Minimap (calculé en temps réel par Lua) */
+      --minimap-left: 48px;
+      --minimap-bottom: 245px;
+      --minimap-width: 270px;
+      --minimap-height: 190px;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent !important;
+      font-family: var(--font-main);
+      color: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* --- CINEMATIC BARS (21:9 MODE) --- */
+    .cinematic-bar {
+      position: fixed;
+      left: 0;
+      width: 100vw;
+      height: 0;
+      background: #000;
+      z-index: 5000;
+      transition: height 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+    #cinema-top { top: 0; }
+    #cinema-bottom { bottom: 0; }
+
+    body.cinematic-active #cinema-top,
+    body.cinematic-active #cinema-bottom {
+      height: 12vh;
+    }
+
+    #hud-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: scale(var(--hud-scale));
+      transform-origin: center center;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+
+    /* --- BOOT SCAN ANIMATION --- */
+    @keyframes hudScanReveal {
+      0%   { opacity: 0; transform: translateY(12px) scaleY(0.85); filter: brightness(2.5) blur(3px); }
+      40%  { opacity: 1; filter: brightness(1.3) blur(0); }
+      100% { opacity: 1; transform: translateY(0) scaleY(1); filter: brightness(1) blur(0); }
+    }
+    @keyframes scanLine {
+      0%   { top: -4px; opacity: 0.8; }
+      90%  { top: 110%; opacity: 0.6; }
+      100% { top: 110%; opacity: 0; }
+    }
+    .hud-boot-scan {
+      animation: hudScanReveal 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    }
+    /* Stagger each module */
+    #top-right.hud-boot-scan    { animation-delay: 0.05s; }
+    #bottom-left.hud-boot-scan  { animation-delay: 0.22s; }
+    #bottom-center.hud-boot-scan{ animation-delay: 0.38s; }
+    #weapon-hud.hud-boot-scan   { animation-delay: 0.50s; }
+    #mod-radio.hud-boot-scan    { animation-delay: 0.45s; }
+    /* Scan line overlay */
+    #hud-scan-line {
+      position: fixed;
+      left: 0; top: 0;
+      width: 100vw;
+      height: 3px;
+      background: linear-gradient(90deg, transparent 0%, rgba(0,206,201,0.7) 50%, transparent 100%);
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0;
+      display: none;
+    }
+    #hud-scan-line.active {
+      display: block;
+      animation: scanLine 0.95s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    }
+
+    body.cinematic-active #bottom-left,
+    body.cinematic-active #bottom-center,
+    body.cinematic-active #weapon-hud {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(20px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    body.cinematic-active #top-right {
+      top: calc(12vh + 16px) !important;
+      transition: top 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .draggable-module {
+      pointer-events: auto;
+      transition: outline 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    body.edit-mode .draggable-module {
+      outline: 2px dashed var(--c-red) !important;
+      outline-offset: 4px;
+      cursor: grab !important;
+      animation: editPulse 1.5s infinite alternate;
+    }
+
+    body.edit-mode .draggable-module:active {
+      cursor: grabbing !important;
+      outline-color: #fff !important;
+      box-shadow: 0 0 25px rgba(230, 33, 33, 0.6) !important;
+    }
+
+    body.edit-mode #weapon-hud {
+      display: flex !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+
+    body.edit-mode #hud-announcement {
+      display: flex !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      outline: 2px dashed #e62121 !important;
+      outline-offset: 4px;
+      cursor: grab !important;
+      box-shadow: 0 0 16px rgba(230, 33, 33, 0.45) !important;
+      position: fixed;
+    }
+
+    body.edit-mode #hud-announcement:active {
+      cursor: grabbing !important;
+      outline-color: #fff !important;
+    }
+
+    body.edit-mode #hud-announcement::after {
+      content: "📢 ANNONCES / PUB (DÉPLAÇABLE)";
+      position: absolute;
+      top: -21px;
+      left: 0;
+      background: linear-gradient(90deg, #e62121, #ff7675);
+      color: #fff;
+      font-size: 8px;
+      font-weight: 900;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.6px;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    }
+
+    body.edit-mode #bottom-left {
+      outline: 2px dashed rgba(0, 206, 201, 0.75) !important;
+      outline-offset: 4px;
+      cursor: grab !important;
+      box-shadow: 0 0 16px rgba(0, 206, 201, 0.35) !important;
+      position: fixed;
+    }
+
+    body.edit-mode #bottom-left:active {
+      cursor: grabbing !important;
+    }
+
+    body.edit-mode #bottom-left::after {
+      content: "⚓ JAUGES STATUTS (DÉPLAÇABLE)";
+      position: absolute;
+      bottom: -21px;
+      top: auto;
+      left: 0;
+      background: linear-gradient(90deg, #00cec9, #0984e3);
+      color: #0c1017;
+      font-size: 8px;
+      font-weight: 900;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.6px;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+    }
+
+    @keyframes editPulse {
+      0% { box-shadow: 0 0 10px rgba(230, 33, 33, 0.2); }
+      100% { box-shadow: 0 0 20px rgba(230, 33, 33, 0.5); }
+    }
+
+    /* --- 1. HAUT DROITE : INFOS JOUEUR --- */
+    #top-right {
+      position: fixed;
+      top: 26px;
+      right: 26px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 7px;
+      z-index: 100;
+    }
+
+    .pill {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      padding: 5px;
+      min-width: 220px;
+      height: 42px;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .circle-badge {
+      width: 42px; height: 42px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--glass-shadow);
+      position: relative;
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: -2px;
+    }
+
+    .id-pill {
+      height: 24px;
+      min-width: unset;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      transition: transform 0.2s ease;
+    }
+    .id-pill i {
+      color: var(--c-red);
+      font-size: 10px;
+    }
+    .id-pill span b {
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .tech-pill {
+      height: 24px;
+      min-width: unset;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.85);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: -2px;
+    }
+    .tech-pill .dot {
+      width: 6px; height: 6px;
+      background: var(--c-cash);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--c-cash);
+      transition: background 0.4s ease, box-shadow 0.4s ease;
+    }
+    .tech-pill .dot.fps-good  { background: #00b894; box-shadow: 0 0 8px rgba(0,184,148,0.9); }
+    .tech-pill .dot.fps-mid   { background: #fdcb6e; box-shadow: 0 0 8px rgba(253,203,110,0.9); }
+    .tech-pill .dot.fps-bad   { background: #e17055; box-shadow: 0 0 8px rgba(225,112,85,0.9); }
+    .tech-pill span b { color: #fff; }
+
+    /* Row 1: Online Circle + Server Pill */
+    .server-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .players-circle svg {
+      position: absolute;
+      top: 0; left: 0;
+      width: 42px; height: 42px;
+      transform: rotate(-90deg);
+    }
+    .players-circle circle.bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.1);
+      stroke-width: 2.5;
+    }
+    .players-circle circle.prog {
+      fill: none;
+      stroke: var(--c-online);
+      stroke-width: 2.5;
+      stroke-dasharray: 113.1;
+      stroke-dashoffset: 35;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 4px rgba(46, 204, 113, 0.6));
+    }
+    .players-circle .num {
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      z-index: 2;
+      line-height: 1;
+      margin-top: 1px;
+    }
+    .players-circle i {
+      font-size: 9px;
+      color: var(--c-online);
+      z-index: 2;
+      margin-top: 2px;
+    }
+
+    .server-pill { flex: 1; justify-content: space-between; max-width: 220px; }
+    .server-pill .logo-circle {
+      width: 32px; height: 32px;
+      background: var(--c-red);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      box-shadow: 0 0 12px rgba(230, 33, 33, 0.4);
+    }
+    .server-info { flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: center; }
+    .server-info .title { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; }
+    .server-info .subtitle { font-size: 8.5px; font-weight: 600; color: rgba(255,255,255,0.65); margin-top: 1px; }
+    .server-pill .discord-icon {
+      width: 26px; height: 26px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; margin-right: 4px;
+    }
+
+    /* Row 2: Date Circle + Player Pill */
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      justify-content: flex-end;
+    }
+    
+    .date-circle .day { font-size: 8px; font-weight: 700; color: rgba(255,255,255,0.65); text-transform: uppercase; }
+    .date-circle .num { font-size: 13.5px; font-weight: 800; }
+
+    .player-pill {
+      flex: 1;
+      justify-content: space-between;
+      max-width: 220px;
+    }
+    .player-pill .avatar-circle {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, rgba(230, 33, 33, 0.45), rgba(20, 20, 25, 0.7));
+      border: 1px solid rgba(230, 33, 33, 0.6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12.5px;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(230, 33, 33, 0.35);
+      flex-shrink: 0;
+    }
+    .player-info {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 4px;
+      overflow: hidden;
+    }
+    .player-info .name {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: capitalize;
+    }
+    .player-info .job {
+      font-size: 8.5px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.7);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .player-pill .player-badge-icon {
+      width: 26px;
+      height: 26px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      margin-right: 4px;
+      color: rgba(255, 255, 255, 0.85);
+      flex-shrink: 0;
+    }
+    /* Row 3: Weather Circle + Cash Pill */
+    .cash-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .cash-row .cash-pill {
+      flex: 1;
+      max-width: 220px;
+    }
+
+    .weather-circle {
+      cursor: default;
+    }
+    .weather-circle i {
+      font-size: 14px;
+      color: #f1c40f;
+      filter: drop-shadow(0 0 5px rgba(241, 196, 15, 0.5));
+      margin-top: 1px;
+      transition: color 0.35s ease;
+    }
+    .weather-circle .temp {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-top: 2px;
+      line-height: 1;
+      letter-spacing: -0.3px;
+    }
+
+    /* Rows 3-6: Money Pills */
+    .money-pill { justify-content: flex-start; padding-right: 14px; max-width: 220px; }
+    .money-pill .icon {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; margin-right: 10px;
+      background: rgba(0,0,0,0.25);
+    }
+    .money-pill .label { font-size: 12px; font-weight: 600; flex: 1; color: rgba(255, 255, 255, 0.8); }
+    .money-pill .val { font-size: 13px; font-weight: 700; color: #ffffff; }
+
+    .cash-pill .icon { color: var(--c-cash); }
+    .bank-pill .icon { color: var(--c-bank); }
+    .dirty-pill .icon { color: var(--c-dirty); }
+    .society-pill .icon { color: var(--c-society); }
+
+    /* --- 2. BAS GAUCHE : JAUGES DE STATUT --- */
+    #bottom-left {
+      position: fixed;
+      bottom: var(--minimap-bottom, 245px);
+      left: var(--minimap-left, 48px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+      transform-origin: bottom left;
+      transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .radio-badge {
+      align-self: flex-start;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 20px;
+      padding: 5px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .radio-badge i { color: var(--c-radio); font-size: 12px; }
+    .radio-badge span { letter-spacing: 0.5px; }
+
+    .status-row {
+      display: flex;
+      gap: 7px;
+    }
+
+    /* Balanced Solid Glass Pod */
+    .status-box {
+      width: 44px;
+      height: 44px;
+      background: rgba(14, 18, 24, 0.78);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease;
+    }
+
+    .status-box:hover {
+      transform: translateY(-2px);
+    }
+
+    /* Container for the liquid layer */
+    .liquid-container {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: 11px;
+      z-index: 1;
+    }
+
+    /* The fluid body */
+    .liquid-fill {
+      position: absolute;
+      bottom: 0;
+      left: -10%;
+      width: 120%;
+      height: 100%;
+      background: var(--liquid-color);
+      opacity: 0.92;
+      transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Smooth sine wave meniscus on top of the liquid */
+    .liquid-fill::before {
+      content: "";
+      position: absolute;
+      top: -4px;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      background: radial-gradient(ellipse at 50% 100%, var(--liquid-light) 60%, transparent 80%);
+      border-radius: 50% 50% 0 0;
+      opacity: 0.95;
+      animation: gentleWaveSway 2.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes gentleWaveSway {
+      0% { transform: scaleX(0.9) translateY(0); }
+      50% { transform: scaleX(1.1) translateY(-1px); }
+      100% { transform: scaleX(0.95) translateY(1px); }
+    }
+
+    /* Icon in the cube */
+    .status-box i {
+      font-size: 15px;
+      color: #ffffff;
+      z-index: 4;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
+      transition: transform 0.2s ease;
+    }
+
+    .status-box .pct {
+      font-size: 8px;
+      font-weight: 800;
+      color: #ffffff;
+      z-index: 4;
+      margin-top: 1px;
+      letter-spacing: 0.2px;
+      text-shadow: 0 1.5px 3px rgba(0,0,0,0.9);
+      line-height: 1;
+    }
+
+    /* Color definitions */
+    .status-box.health {
+      --liquid-color: #d63031;
+      --liquid-light: #ff7675;
+    }
+    .status-box.armor {
+      --liquid-color: #00cec9;
+      --liquid-light: #81ecec;
+    }
+    .status-box.food {
+      --liquid-color: #e67e22;
+      --liquid-light: #fab1a0;
+    }
+    .status-box.water {
+      --liquid-color: #0984e3;
+      --liquid-light: #74b9ff;
+    }
+    .status-box.stress {
+      --liquid-color: #8e44ad;
+      --liquid-light: #a29bfe;
+    }
+    .status-box.stamina {
+      --liquid-color: #f1c40f;
+      --liquid-light: #ffeaa7;
+    }
+    .status-box.oxygen {
+      --liquid-color: #6c5ce7;
+      --liquid-light: #a29bfe;
+    }
+
+    /* --- ALERTES CRITIQUES --- */
+    @keyframes criticalPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(230,33,33,0.0), 0 4px 14px rgba(0,0,0,0.45); border-color: rgba(255,255,255,0.16); }
+      30%  { box-shadow: 0 0 14px 5px rgba(230,33,33,0.65), 0 4px 14px rgba(0,0,0,0.45); border-color: rgba(230,33,33,0.8); }
+      60%  { box-shadow: 0 0 4px 0 rgba(230,33,33,0.2), 0 4px 14px rgba(0,0,0,0.45); border-color: rgba(230,33,33,0.35); }
+      100% { box-shadow: 0 0 0 0 rgba(230,33,33,0.0), 0 4px 14px rgba(0,0,0,0.45); border-color: rgba(255,255,255,0.16); }
+    }
+    @keyframes criticalShake {
+      0%, 100% { transform: translateX(0); }
+      15%       { transform: translateX(-2px) rotate(-0.8deg); }
+      30%       { transform: translateX(2px) rotate(0.8deg); }
+      45%       { transform: translateX(-1.5px); }
+      60%       { transform: translateX(1.5px); }
+      75%       { transform: translateX(-1px); }
+    }
+    .status-box.critical {
+      animation: criticalPulse 1.4s ease-in-out infinite, criticalShake 1.4s ease-in-out infinite;
+    }
+    .status-box.critical .liquid-fill {
+      background: #e62121 !important;
+      opacity: 1 !important;
+    }
+    .status-box.critical i {
+      color: #ff6b6b !important;
+      filter: drop-shadow(0 0 6px rgba(230,33,33,0.9));
+    }
+    
+    /* --- INDICATEUR VOCAL --- */
+    .status-box.voice {
+      background: linear-gradient(145deg, rgba(16, 24, 34, 0.88) 0%, rgba(10, 14, 20, 0.95) 100%);
+      border: 1px solid rgba(0, 206, 201, 0.35);
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding-top: 1px;
+      transition: all 0.25s ease;
+    }
+
+    /* Ambient internal backlight */
+    .voice-ambient-glow {
+      position: absolute;
+      inset: 0;
+      border-radius: 11px;
+      background: radial-gradient(circle at 50% 45%, rgba(0, 206, 201, 0.2) 0%, transparent 75%);
+      opacity: 0.7;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    /* Pulse Ring around Pod when Talking */
+    .voice-pulse-ring {
+      position: absolute;
+      inset: -3px;
+      border-radius: 15px;
+      border: 1.5px solid transparent;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    /* Circular Dial Container */
+    .voice-dial-container {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    /* SVG Radial Ring */
+    .voice-ring-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      transform: rotate(-90deg);
+    }
+
+    /* Background track: 3 subtle dark grey segments */
+    .voice-ring-svg .ring-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 2.4;
+      stroke-dasharray: 26 4.4 26 4.4 26 4.4;
+    }
+
+    /* Active Glowing Cyan Segments */
+    .voice-ring-svg .ring-fill {
+      fill: none;
+      stroke: #00cec9;
+      stroke-width: 2.6;
+      stroke-dasharray: 0 100;
+      filter: drop-shadow(0 0 4px rgba(0, 206, 201, 0.8));
+      transition: stroke-dasharray 0.35s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.25s ease, filter 0.25s ease;
+    }
+
+    /* Segment illumination by range mode */
+    .status-box.voice[data-range="1"] .ring-fill {
+      stroke-dasharray: 26 70;
+    }
+    .status-box.voice[data-range="2"] .ring-fill {
+      stroke-dasharray: 26 4.4 26 40;
+    }
+    .status-box.voice[data-range="3"] .ring-fill {
+      stroke-dasharray: 26 4.4 26 4.4 26 4.4;
+      filter: drop-shadow(0 0 6px rgba(0, 206, 201, 0.95));
+    }
+
+    /* Center Microphone Icon */
+    .voice-mic-icon {
+      position: relative;
+      z-index: 3;
+      font-size: 13px;
+      color: #00cec9;
+      filter: drop-shadow(0 0 5px rgba(0, 206, 201, 0.6));
+      transition: all 0.25s ease;
+    }
+
+    /* Mode Label (CHUCH, NORM, CRI) */
+    .status-box.voice .voice-label {
+      font-size: 7px;
+      font-weight: 800;
+      color: #00cec9;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      line-height: 1;
+      margin-top: 1px;
+      z-index: 3;
+      text-shadow: 0 0 5px rgba(0, 206, 201, 0.4);
+      transition: all 0.25s ease;
+    }
+
+    /* --------------------------------------------------------------------------
+       TALKING STATE (Speaking Feedback)
+       -------------------------------------------------------------------------- */
+    .status-box.voice.talking {
+      border-color: #00cec9;
+      box-shadow: 0 0 20px rgba(0, 206, 201, 0.6), 0 4px 14px rgba(0, 0, 0, 0.5);
+    }
+
+    .status-box.voice.talking .voice-ambient-glow {
+      opacity: 1;
+      background: radial-gradient(circle at 50% 50%, rgba(0, 206, 201, 0.4) 0%, transparent 75%);
+    }
+
+    .status-box.voice.talking .voice-pulse-ring {
+      opacity: 1;
+      border-color: rgba(0, 206, 201, 0.85);
+      animation: micRadarPulse 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+    }
+
+    .status-box.voice.talking .voice-mic-icon {
+      color: #ffffff;
+      filter: drop-shadow(0 0 8px #00cec9) drop-shadow(0 0 14px rgba(0, 206, 201, 0.9));
+      transform: scale(1.15);
+    }
+
+    .status-box.voice.talking .ring-fill {
+      stroke: #ffffff;
+      filter: drop-shadow(0 0 8px #00cec9) drop-shadow(0 0 16px rgba(0, 206, 201, 1));
+      animation: dialThrob 0.5s ease-in-out infinite alternate;
+    }
+
+    .status-box.voice.talking .voice-label {
+      color: #ffffff;
+      text-shadow: 0 0 8px #00cec9;
+    }
+
+    @keyframes dialThrob {
+      0%   { stroke-width: 2.6; }
+      100% { stroke-width: 3.4; }
+    }
+
+    @keyframes micRadarPulse {
+      0% {
+        transform: scale(0.96);
+        box-shadow: 0 0 0 0 rgba(0, 206, 201, 0.7);
+        opacity: 0.9;
+      }
+      70% {
+        transform: scale(1.1);
+        box-shadow: 0 0 0 7px rgba(0, 206, 201, 0);
+        opacity: 0.2;
+      }
+      100% {
+        transform: scale(1.15);
+        box-shadow: 0 0 0 9px rgba(0, 206, 201, 0);
+        opacity: 0;
+      }
+    }
+
+    .mic-id {
+      display: none !important;
+    }
+
+    /* --- 3. BAS CENTRE : BOUSSOLE & RUE --- */
+    #bottom-center {
+      position: fixed;
+      bottom: 26px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 30px;
+      padding: 6px 18px 6px 10px;
+      z-index: 90;
+    }
+
+    /* Premium Arc Compass Widget */
+    .compass-arc-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      width: 54px;
+    }
+    .compass-arc-svg {
+      width: 54px;
+      height: 32px;
+      overflow: visible;
+    }
+    /* Track arc */
+    .compass-arc-track {
+      fill: none;
+      stroke: rgba(255,255,255,0.1);
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+    /* Active glow arc */
+    .compass-arc-active {
+      fill: none;
+      stroke: var(--c-red);
+      stroke-width: 3;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 5px rgba(230,33,33,0.8));
+      transition: stroke-dashoffset 0.3s ease;
+    }
+    /* Tick marks */
+    .compass-tick {
+      stroke: rgba(255,255,255,0.25);
+      stroke-width: 1;
+    }
+    .compass-tick.major {
+      stroke: rgba(255,255,255,0.5);
+      stroke-width: 1.5;
+    }
+    /* Central heading text on the arc */
+    .compass-arc-label {
+      font-size: 9px;
+      font-weight: 900;
+      fill: var(--c-red);
+      text-anchor: middle;
+      dominant-baseline: middle;
+      font-family: 'Montserrat', sans-serif;
+      letter-spacing: 0.5px;
+    }
+    /* Degree number below the arc */
+    .compass-degree {
+      font-size: 9px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 0.3px;
+      margin-top: 1px;
+      line-height: 1;
+    }
+
+    .location-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .street-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+
+    .zone-name {
+      font-size: 8.5px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+    }
+
+    /* Old single-badge compass (hidden, kept for compat) */
+    .compass-heading { display: none; }
+
+    /* --- 4. BAS DROITE : HUD D'ARME (MASQUÉ PAR DÉFAUT) --- */
+    #weapon-hud {
+      position: fixed;
+      bottom: 26px;
+      right: 26px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 50px;
+      padding: 5px 18px 5px 6px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      height: 44px;
+      z-index: 100;
+      transition: opacity 0.3s ease, transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      overflow: hidden;
+    }
+
+    #weapon-hud.shooting-flash {
+      transform: scale(1.05);
+      border-color: rgba(255, 75, 75, 0.95) !important;
+      box-shadow: 0 0 25px rgba(230, 33, 33, 0.85), 0 4px 18px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    #weapon-hud.low-ammo {
+      border-color: rgba(230, 33, 33, 0.65);
+      animation: lowAmmoGlow 1.2s infinite ease-in-out;
+    }
+
+    #weapon-hud.low-ammo .ammo-clip {
+      color: #ff4757;
+      text-shadow: 0 0 10px rgba(255, 71, 87, 0.6);
+    }
+
+    @keyframes lowAmmoGlow {
+      0%, 100% {
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 8px rgba(230, 33, 33, 0.25);
+        border-color: rgba(230, 33, 33, 0.5);
+      }
+      50% {
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 22px rgba(230, 33, 33, 0.7);
+        border-color: rgba(255, 71, 87, 0.9);
+      }
+    }
+
+    .reload-progress-bar {
+      display: none;
+      position: absolute;
+      bottom: 0;
+      left: 14px;
+      right: 14px;
+      height: 2.5px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+    }
+
+    #weapon-hud.is-reloading .reload-progress-bar {
+      display: block;
+    }
+
+    .reload-progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--c-red), #ffffff, var(--c-red), transparent);
+      animation: reloadBeam 0.85s infinite linear;
+    }
+
+    @keyframes reloadBeam {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+
+    .weapon-badge {
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .weapon-badge svg {
+      width: 20px;
+      height: 20px;
+      fill: #ffffff;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+    }
+
+    .weapon-info-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .weapon-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .weapon-sub-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .fire-mode-tag {
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--c-cash);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .fire-mode-tag.reloading {
+      color: #f1c40f;
+    }
+
+    .weapon-attachments-container {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .attachment-tag {
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+
+    .attachment-tag.silencer {
+      background: rgba(0, 206, 201, 0.15);
+      border: 1px solid rgba(0, 206, 201, 0.45);
+      color: #00cec9;
+    }
+
+    .attachment-tag.flashlight {
+      background: rgba(241, 196, 15, 0.15);
+      border: 1px solid rgba(241, 196, 15, 0.45);
+      color: #f1c40f;
+    }
+
+    .attachment-tag.scope {
+      background: rgba(162, 155, 254, 0.15);
+      border: 1px solid rgba(162, 155, 254, 0.45);
+      color: #a29bfe;
+    }
+
+    .weapon-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.15);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+
+    .ammo-digits-box {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+
+    .ammo-clip {
+      font-size: 16px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+      transition: color 0.2s ease, transform 0.1s ease;
+    }
+
+    .ammo-clip.ammo-bump {
+      transform: scale(1.2);
+    }
+
+    .ammo-reserve {
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1;
+    }
+
+    .ammo-digits-box.is-melee .ammo-reserve {
+      display: none;
+    }
+
+    /* --- 5. EDIT MODE BAR --- */
+    #edit-mode-bar {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: rgba(14, 17, 22, 0.95);
+      border: 1px solid rgba(230, 33, 33, 0.5);
+      box-shadow: 0 10px 30px rgba(230, 33, 33, 0.3);
+      border-radius: 30px;
+      padding: 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #edit-mode-bar.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .edit-bar-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .edit-bar-title i { color: var(--c-red); }
+
+    .edit-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .edit-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: var(--font-main);
+      font-size: 11px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .edit-btn-reset { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .edit-btn-reset:hover { background: rgba(255, 255, 255, 0.2); }
+    .edit-btn-minimap {
+      background: rgba(0, 206, 201, 0.18);
+      border: 1px solid rgba(0, 206, 201, 0.45);
+      color: #00cec9;
+    }
+    .edit-btn-minimap:hover {
+      background: rgba(0, 206, 201, 0.35);
+      color: #fff;
+    }
+    .edit-btn-save { background: var(--c-red); color: #fff; }
+    .edit-btn-save:hover { background: #ff3838; }
+    .edit-btn-founder {
+      background: linear-gradient(135deg, #f39c12, #d35400);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(243, 156, 18, 0.4);
+    }
+    .edit-btn-founder:hover {
+      background: linear-gradient(135deg, #f1c40f, #e67e22);
+      transform: translateY(-1px);
+    }
+    .edit-btn-carhud {
+      background: rgba(229, 9, 20, 0.22);
+      border: 1px solid rgba(229, 9, 20, 0.5);
+      color: #fff;
+    }
+    .edit-btn-carhud:hover {
+      background: rgba(229, 9, 20, 0.45);
+      border-color: #ff3344;
+      transform: translateY(-1px);
+    }
+
+    /* --- 6. IN-GAME CONFIGURATION OVERLAY (/hud) --- */
+    #config-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(4, 7, 12, 0.75);
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #config-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #config-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.95);
+      width: 520px;
+      max-width: 94vw;
+      background: rgba(12, 15, 20, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(230, 33, 33, 0.18);
+      border-radius: 20px;
+      padding: 20px 22px;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #config-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+
+    .modal-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .modal-logo {
+      background: var(--c-red);
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(230, 33, 33, 0.4);
+    }
+
+    .modal-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .modal-cmd-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 2px 7px;
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .modal-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .modal-close:hover { background: rgba(230, 33, 33, 0.6); }
+
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 500px;
+      overflow-y: auto;
+      padding-right: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--c-red) rgba(255, 255, 255, 0.05);
+    }
+
+    /* CUSTOM ULTRA-SLEEK SCROLLBAR */
+    .modal-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .modal-body::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+    }
+    .modal-body::-webkit-scrollbar-thumb {
+      background: var(--c-red);
+      border-radius: 10px;
+      box-shadow: 0 0 8px rgba(230, 33, 33, 0.6);
+    }
+    .modal-body::-webkit-scrollbar-thumb:hover {
+      background: #ff3838;
+      box-shadow: 0 0 12px rgba(230, 33, 33, 0.9);
+    }
+    .modal-body::-webkit-scrollbar-button {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    .config-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+    }
+
+    .slider-row {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .slider-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .slider-info .label { font-size: 13px; font-weight: 700; }
+    .slider-info .sub { font-size: 10px; color: rgba(255,255,255,0.5); }
+
+    .slider-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 140px;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 5px;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--c-red);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(230, 33, 33, 0.5);
+    }
+
+    .scale-val {
+      font-size: 12px;
+      font-weight: 800;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .move-mode-box {
+      background: linear-gradient(135deg, rgba(230,33,33,0.1), rgba(255,255,255,0.02));
+      border: 1px solid rgba(230,33,33,0.3);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .move-btn {
+      background: var(--c-red);
+      color: #fff;
+      font-family: var(--font-main);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(230, 33, 33, 0.4);
+      transition: all 0.2s;
+    }
+    .move-btn:hover {
+      background: #ff3838;
+      box-shadow: 0 4px 20px rgba(230, 33, 33, 0.6);
+    }
+
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .toggle-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-item span {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255,255,255,0.15);
+      transition: .25s;
+      border-radius: 20px;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 14px; width: 14px;
+      left: 3px; bottom: 3px;
+      background-color: white;
+      transition: .25s;
+      border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--c-red); }
+    input:checked + .slider:before { transform: translateX(18px); }
+
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 16px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-family: var(--font-main);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
+
+    .btn-primary {
+      background: var(--c-red);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(230, 33, 33, 0.4);
+    }
+    .btn-primary:hover {
+      background: #ff3838;
+      box-shadow: 0 4px 20px rgba(230, 33, 33, 0.6);
+    }
+
+
+    /* MODAL TABS */
+    .modal-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+    }
+    .modal-tab {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.6);
+      padding: 8px 14px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s;
+    }
+    .modal-tab:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+    .modal-tab.active {
+      background: rgba(230, 33, 33, 0.2);
+      border-color: rgba(230, 33, 33, 0.6);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(230, 33, 33, 0.3);
+    }
+    .tab-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ANNOUNCEMENTS TAB STYLING */
+    .ann-config-top {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ann-config-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ann-interval-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ann-interval-control input {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      color: #fff;
+      font-family: var(--font-main);
+      font-weight: 700;
+      font-size: 12px;
+      padding: 4px 8px;
+      text-align: center;
+      outline: none;
+    }
+    .ann-interval-control span {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      font-weight: 600;
+    }
+
+    .ann-items-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 2px;
+    }
+    .ann-add-btn {
+      background: rgba(230, 33, 33, 0.2);
+      border: 1px solid rgba(230, 33, 33, 0.5);
+      color: #fff;
+      font-family: var(--font-main);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .ann-add-btn:hover {
+      background: var(--c-red);
+      box-shadow: 0 0 10px rgba(230, 33, 33, 0.5);
+    }
+
+    .ann-items-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .ann-item-row {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-left: 3px solid var(--row-color, #5865F2);
+      border-radius: 10px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .ann-item-row:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .ann-item-color {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px var(--row-color, rgba(88, 101, 242, 0.4));
+    }
+    .ann-item-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .ann-item-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .ann-item-tag {
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+    }
+    .ann-item-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ann-item-desc {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.45);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ann-item-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .ann-action-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.7);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      transition: all 0.2s;
+    }
+    .ann-action-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+    .ann-action-btn.delete-btn:hover {
+      background: rgba(230, 33, 33, 0.6);
+      border-color: var(--c-red);
+      color: #fff;
+    }
+
+    /* ANNOUNCEMENT EDITOR CARD */
+    .ann-editor-card {
+      background: rgba(14, 18, 26, 0.98);
+      border: 1px solid rgba(230, 33, 33, 0.4);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .ann-editor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+    .ann-editor-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--c-red);
+    }
+    .ann-editor-close {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .ann-editor-close:hover { color: #fff; }
+    .ann-editor-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .ann-field-row {
+      display: flex;
+      gap: 10px;
+    }
+    .ann-field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+    }
+    .ann-field label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .ann-field input[type="text"] {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      color: #fff;
+      font-family: var(--font-main);
+      font-size: 11px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .ann-field input[type="text"]:focus {
+      border-color: var(--c-red);
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .ann-icon-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ann-icon-preview {
+      width: 32px;
+      height: 30px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .ann-icon-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 4px;
+    }
+    .ann-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 0.7);
+      width: 28px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+    .ann-chip:hover {
+      background: rgba(230, 33, 33, 0.3);
+      color: #fff;
+      border-color: var(--c-red);
+    }
+    .ann-color-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ann-color-row input[type="color"] {
+      -webkit-appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      width: 32px;
+      height: 30px;
+      border-radius: 7px;
+      background: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .ann-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .ann-color-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+    .ann-color-chips {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+    .color-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .color-dot:hover {
+      transform: scale(1.2);
+      border-color: #fff;
+    }
+    .ann-preview-box {
+      margin-top: 4px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .ann-preview-lbl {
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      color: rgba(255, 255, 255, 0.4);
+      margin-bottom: 6px;
+    }
+    .ann-preview-banner {
+      width: 100%;
+      height: 52px;
+      position: relative;
+      border-radius: 8px;
+      background: rgba(9, 10, 14, 0.74);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px 0 16px;
+      box-sizing: border-box;
+      overflow: hidden;
+      font-family: 'Outfit', sans-serif;
+    }
+    .ann-preview-banner .card-accent-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3.5px;
+      background: var(--ann-color, #E50914);
+      box-shadow: 0 0 14px var(--ann-color, #E50914);
+      border-radius: 4px 0 0 4px;
+      z-index: 5;
+    }
+    .ann-prev-icon {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), 0 0 12px var(--ann-glow, rgba(229, 9, 20, 0.2)), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 2;
+    }
+    .ann-prev-icon i {
+      font-size: 16px;
+      color: var(--ann-color, #E50914);
+      filter: drop-shadow(0 0 8px var(--ann-color, #E50914));
+    }
+    .ann-prev-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 2;
+      font-family: 'Outfit', sans-serif;
+    }
+    .ann-prev-top {
+      display: flex;
+      align-items: center;
+      line-height: 1.15;
+    }
+    .ann-prev-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ann-prev-bottom {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      line-height: 1;
+    }
+    .ann-prev-sponsor {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 1.5px 5px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #ffd700;
+      flex-shrink: 0;
+    }
+    .ann-prev-sponsor i { font-size: 6px; color: #ffd700; }
+    .ann-prev-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--ann-color, #E50914);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .ann-prev-tag::before {
+      content: '// ';
+      opacity: 0.7;
+    }
+    .ann-prev-desc {
+      font-size: 11px;
+      font-weight: 400;
+      color: #a1a1aa;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ann-prev-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(90deg, var(--ann-color, #E50914) 0%, rgba(176, 7, 14, 0.95) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      padding: 6.5px 13px;
+      border-radius: 6px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #ffffff;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px var(--ann-glow, rgba(229, 9, 20, 0.35));
+      z-index: 2;
+    }
+    .ann-prev-cta::after {
+      content: '\f061';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      font-size: 8.5px;
+      margin-left: 4px;
+    }
+    .ann-editor-btns {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .hidden { display: none !important; }
+
+    /* --- PUBLICITÉ & ANNONCES ROTATIVES --- */
+    /* Pas de backdrop-filter : il fait saccader le navigateur CEF de FiveM. */
+    #hud-announcement {
+      position: fixed;
+      bottom: calc(var(--minimap-bottom, 245px) + 54px);
+      left: var(--minimap-left, 48px);
+      z-index: 101;
+      width: 425px;
+      height: 60px;
+      box-sizing: border-box;
+      pointer-events: none;
+      flex-shrink: 0;
+      transform-origin: bottom left;
+      transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s ease;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .ann-card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px 0 10px;
+      box-sizing: border-box;
+      border-radius: 12px;
+      background:
+        linear-gradient(100deg, var(--ann-glow, rgba(229, 9, 20, 0.27)) 0%, rgba(14, 15, 20, 0) 42%),
+        linear-gradient(180deg, rgba(22, 24, 31, 0.92) 0%, rgba(10, 11, 15, 0.9) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      box-shadow:
+        0 10px 28px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      overflow: hidden;
+      animation: annEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Carte hors période d'affichage, en véhicule, en visée ou en mode cinéma */
+    #hud-announcement.ann-away .ann-card {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    body.edit-mode #hud-announcement.ann-away .ann-card {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* Onglet Annonces de /hud réservé aux admins */
+    body:not(.hud-admin) #tab-btn-announcements,
+    body:not(.hud-admin) #tab-announcements {
+      display: none !important;
+    }
+
+    @keyframes annEnter {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Reflet lumineux qui balaie la carte à chaque changement d'annonce */
+    .ann-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -40%;
+      width: 35%;
+      background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
+      transform: skewX(-18deg);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+    .ann-card.swap::after {
+      animation: annSheen 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes annSheen {
+      0%   { left: -40%; opacity: 0; }
+      20%  { opacity: 1; }
+      100% { left: 120%; opacity: 0; }
+    }
+
+    /* Liseré d'accent : fin trait lumineux en haut de la carte */
+    .card-accent-bar {
+      position: absolute;
+      top: 0;
+      left: 14px;
+      width: 120px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, var(--ann-color, #E50914) 50%, transparent 100%);
+      opacity: 0.9;
+      z-index: 5;
+    }
+
+    /* Halo diffus derrière l'icône */
+    .ann-ambient-glow {
+      position: absolute;
+      top: 50%;
+      left: -18px;
+      transform: translateY(-50%);
+      width: 110px;
+      height: 110px;
+      background: radial-gradient(circle, var(--ann-glow-high, rgba(229, 9, 20, 0.5)) 0%, transparent 65%);
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Tuile icône pleine, teintée par la couleur de l'annonce */
+    .ann-icon-pod {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      background: linear-gradient(145deg, var(--ann-color, #E50914) 0%, var(--ann-glow-high, rgba(229, 9, 20, 0.52)) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow:
+        0 6px 16px var(--ann-glow, rgba(229, 9, 20, 0.27)),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        inset 0 -6px 12px rgba(0, 0, 0, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      z-index: 2;
+    }
+
+    .ann-icon-pod i {
+      font-size: 18px;
+      color: #ffffff;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    }
+
+    .ann-icon-pod.pop {
+      animation: annPodPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes annPodPop {
+      0%   { transform: scale(0.82) rotate(-6deg); }
+      60%  { transform: scale(1.08) rotate(2deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+
+    /* Corps : titre + ligne meta */
+    .ann-body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      flex: 1;
+      min-width: 0;
+      z-index: 2;
+    }
+
+    .ann-row-top {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      line-height: 1.1;
+    }
+
+    .ann-title {
+      font-family: 'Montserrat', 'Outfit', sans-serif;
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    .ann-row-bottom {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      line-height: 1.1;
+      width: 100%;
+      min-width: 0;
+    }
+
+    /* Point "en direct" dans la chip */
+    .pulse-dot {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      background-color: #ffffff;
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulseDot 1.8s ease-out infinite;
+    }
+
+    @keyframes pulseDot {
+      0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+      100% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0); }
+    }
+
+    /* Chip de catégorie */
+    .ann-tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px 2px 6px;
+      border-radius: 999px;
+      background: var(--ann-glow, rgba(229, 9, 20, 0.27));
+      border: 1px solid var(--ann-glow-high, rgba(229, 9, 20, 0.52));
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .ann-text {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.72);
+      letter-spacing: 0.15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    /* Colonne droite : pips + CTA */
+    .ann-action-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 6px;
+      flex-shrink: 0;
+      z-index: 3;
+    }
+
+    .ann-pips {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .ann-pip {
+      width: 4px;
+      height: 4px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.18);
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
+    }
+
+    .ann-pip.active {
+      width: 14px;
+      background: var(--ann-color, #E50914);
+    }
+
+    /* CTA "ghost" teinté */
+    .ann-cta-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 22px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--ann-glow-high, rgba(229, 9, 20, 0.52));
+      font-family: 'Montserrat', 'Outfit', sans-serif;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.9px;
+      color: #ffffff;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    .ann-cta-badge i, .ann-cta-badge svg {
+      font-size: 8px;
+      color: var(--ann-color, #E50914);
+      animation: annArrow 1.6s ease-in-out infinite;
+    }
+
+    @keyframes annArrow {
+      0%, 100% { transform: translateX(0); }
+      50%      { transform: translateX(2px); }
+    }
+
+    .ann-title.sliding, .ann-text.sliding, .ann-cta-badge.sliding {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    /* Progression : fine ligne au bas de la carte */
+    .ann-progress-track {
+      position: absolute;
+      bottom: 0;
+      left: 12px;
+      right: 12px;
+      height: 2px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      z-index: 3;
+    }
+
+    .ann-progress-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--ann-glow, rgba(229, 9, 20, 0.27)) 0%, var(--ann-color, #E50914) 100%);
+    }
+
+  </style>
+</head>
+<body style="display: none;">
+
+  <!-- CINEMATIC BARS -->
+  <div class="cinematic-bar" id="cinema-top"></div>
+  <div class="cinematic-bar" id="cinema-bottom"></div>
+
+
+
+  <!-- EDIT MODE BAR -->
+  <div id="edit-mode-bar">
+    <div class="edit-bar-title" id="lbl-edit-bar-title"><i class="fa-solid fa-arrows-up-down-left-right"></i> MODE DÉPLACEMENT ACTIF</div>
+    <div class="edit-bar-actions">
+      <button class="edit-btn edit-btn-minimap" id="btn-snap-minimap" title="Réaligner automatiquement les jauges au-dessus de la minimap GTA"><i class="fa-solid fa-map-pin"></i> Aligner Minimap</button>
+      <button class="edit-btn edit-btn-carhud" id="btn-edit-carhud" style="display: none;" title="Modifier l'emplacement du compteur véhicule"><i class="fa-solid fa-gauge-high" style="color: var(--c-red);"></i> HUD Véhicule</button>
+      <button class="edit-btn edit-btn-reset" id="btn-reset-positions"><i class="fa-solid fa-rotate-left"></i> Réinitialiser</button>
+      <button class="edit-btn edit-btn-founder" id="btn-save-server-default" title="Enregistrer ces positions comme disposition par défaut pour tout le serveur"><i class="fa-solid fa-crown"></i> Définir par défaut (Serveur)</button>
+      <button class="edit-btn edit-btn-save" id="btn-save-positions"><i class="fa-solid fa-check"></i> Terminer</button>
+    </div>
+  </div>
+
+  <!-- Boot scan line overlay -->
+  <div id="hud-scan-line"></div>
+
+  <div id="hud-container">
+    
+    <!-- 1. Haut droite : infos joueur -->
+    <div id="top-right" class="draggable-module" data-module="top-right">
+      
+      <!-- Meta Row: ID Badge & Tech Status Pill -->
+      <div class="meta-row" id="mod-meta-row">
+        <div class="pill id-pill" id="mod-id-pill" title="Votre ID Joueur">
+          <i class="fa-solid fa-id-badge"></i>
+          <span>ID: <b id="val-player-id">1</b></span>
+        </div>
+        <div class="tech-pill pill" id="mod-tech">
+          <span class="dot"></span>
+          <span><b id="val-fps">60</b> FPS</span>
+          <span>•</span>
+          <span><b id="val-ping">24</b> MS</span>
+        </div>
+      </div>
+
+      <!-- Row 1: Online Players Circle (ABOVE Date Circle) + Server Pill -->
+      <div class="server-row" id="mod-server-row">
+        
+        <!-- Online Players Circle Badge -->
+        <div class="circle-badge players-circle" id="mod-online" title="Joueurs connectés">
+          <svg viewBox="0 0 42 42">
+            <circle class="bg" cx="21" cy="21" r="18"></circle>
+            <circle class="prog" cx="21" cy="21" r="18" id="prog-online"></circle>
+          </svg>
+          <div class="num" id="val-players">64</div>
+          <i class="fa-solid fa-users"></i>
+        </div>
+
+        <!-- Server Pill -->
+        <div class="pill server-pill" id="mod-server">
+          <div class="logo-circle">BL</div>
+          <div class="server-info">
+            <div class="title">BLOODLEAK</div>
+            <div class="subtitle">discord.gg/bloodleak</div>
+          </div>
+          <div class="discord-icon"><i class="fa-brands fa-discord"></i></div>
+        </div>
+
+      </div>
+
+      <!-- Row 2: Date Circle (BELOW Online Circle) + Player Pill -->
+      <div class="player-row" id="mod-player-row">
+        
+        <!-- Date Circle Badge -->
+        <div class="circle-badge date-circle" id="mod-date" title="Date">
+          <span class="day" id="date-day">LUN</span>
+          <span class="num" id="date-num">29</span>
+        </div>
+
+        <!-- Player Info Pill -->
+        <div class="pill player-pill" id="mod-player">
+          <div class="avatar-circle">
+            <i class="fa-solid fa-user"></i>
+          </div>
+          <div class="player-info">
+            <div class="name" id="rp-name">Joueur</div>
+            <div class="job"><span id="rp-job">Sans-emploi</span> • <span id="rp-grade">Citoyen</span></div>
+          </div>
+          <div class="player-badge-icon" title="Identité RP">
+            <i class="fa-solid fa-id-card"></i>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Row 3: Weather Circle (BELOW Date Circle) + Cash Pill -->
+      <div class="cash-row" id="mod-cash-row">
+        
+        <!-- Weather Circle Badge -->
+        <div class="circle-badge weather-circle" id="mod-weather" title="Météo">
+          <i class="fa-solid fa-sun" id="weather-icon"></i>
+          <span class="temp" id="weather-temp">24°</span>
+        </div>
+
+        <!-- Cash Pill -->
+        <div class="pill money-pill cash-pill" id="mod-cash" style="cursor: pointer;">
+          <div class="icon"><i class="fa-solid fa-money-bill-wave"></i></div>
+          <div class="label">Cash</div>
+          <div class="val" id="val-cash">0$</div>
+        </div>
+
+      </div>
+
+      <div class="pill money-pill bank-pill" id="mod-bank">
+        <div class="icon"><i class="fa-solid fa-building-columns"></i></div>
+        <div class="label">Bank</div>
+        <div class="val" id="val-bank">0$</div>
+      </div>
+
+      <div class="pill money-pill dirty-pill" id="mod-dirty" style="display: none;">
+        <div class="icon"><i class="fa-solid fa-sack-xmark"></i></div>
+        <div class="label">Sale</div>
+        <div class="val" id="val-dirty">0$</div>
+      </div>
+
+      <div class="pill money-pill society-pill" id="mod-society" style="display: none;">
+        <div class="icon"><i class="fa-solid fa-briefcase"></i></div>
+        <div class="label">Entreprise</div>
+        <div class="val" id="val-society">0$</div>
+      </div>
+
+    </div>
+
+    <!-- 2. ANNOUNCEMENT & PUB BANNER (DRAGGABLE MODULE) -->
+    <div id="hud-announcement" class="draggable-module minimap-anchored-module" data-module="hud-announcement" style="display: none;">
+      <div class="ann-card" id="ann-card">
+        <div class="card-accent-bar"></div>
+        <div class="ann-ambient-glow"></div>
+
+        <!-- Tuile icône -->
+        <div class="ann-icon-pod" id="ann-icon-box">
+          <i class="fa-brands fa-discord" id="ann-icon"></i>
+        </div>
+
+        <!-- Titre + chip de catégorie + description -->
+        <div class="ann-body">
+          <div class="ann-row-top">
+            <span class="ann-title" id="ann-title">REJOINS LA COMMUNAUTÉ</span>
+          </div>
+          <div class="ann-row-bottom">
+            <span class="ann-tag-pill"><span class="pulse-dot"></span><span id="ann-tag">DISCORD</span></span>
+            <span class="ann-text" id="ann-text">discord.gg/bloodleak</span>
+          </div>
+        </div>
+
+        <!-- Pips + CTA -->
+        <div class="ann-action-col">
+          <div class="ann-pips" id="ann-pips"></div>
+          <div class="ann-cta-badge" id="ann-cta-box">
+            <span id="ann-cta">REJOINDRE</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </div>
+        </div>
+
+        <!-- Progression -->
+        <div class="ann-progress-track">
+          <div class="ann-progress-fill" id="ann-progress-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. BOTTOM LEFT: STATUS PODS (AUTOMATIC MINIMAP ADAPTATION) -->
+    <div id="bottom-left" class="draggable-module minimap-anchored-module" data-module="bottom-left">
+      
+      <div class="radio-badge hidden" id="mod-radio">
+        <i class="fa-solid fa-walkie-talkie"></i>
+        <span id="val-radio">104.5 MHz</span>
+      </div>
+
+      <div class="status-row">
+        
+        <!-- Voice Pod (Sleek Radial Acoustic Meter) -->
+        <div class="status-box voice" id="pod-voice" data-range="2">
+          <div class="voice-pulse-ring"></div>
+          <div class="voice-ambient-glow"></div>
+          <div class="voice-dial-container">
+            <svg class="voice-ring-svg" viewBox="0 0 36 36">
+              <circle class="ring-bg" cx="18" cy="18" r="14.5" />
+              <circle class="ring-fill" cx="18" cy="18" r="14.5" />
+            </svg>
+            <i class="fa-solid fa-microphone voice-mic-icon" id="icon-voice"></i>
+          </div>
+          <span class="voice-label" id="pct-voice">NORM</span>
+        </div>
+
+        <!-- Health Pod -->
+        <div class="status-box health" id="pod-health">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-health" style="height: 100%;"></div>
+          </div>
+          <i class="fa-solid fa-heart"></i>
+          <span class="pct" id="pct-health">100%</span>
+        </div>
+
+        <!-- Armor Pod (Vest) -->
+        <div class="status-box armor" id="pod-armor">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-armor" style="height: 0%;"></div>
+          </div>
+          <i class="fa-solid fa-vest"></i>
+          <span class="pct" id="pct-armor">0%</span>
+        </div>
+
+        <!-- Food Pod (Burger) -->
+        <div class="status-box food" id="pod-food">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-food" style="height: 100%;"></div>
+          </div>
+          <i class="fa-solid fa-burger"></i>
+          <span class="pct" id="pct-food">100%</span>
+        </div>
+
+        <!-- Water Pod (Droplet) -->
+        <div class="status-box water" id="pod-water">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-water" style="height: 100%;"></div>
+          </div>
+          <i class="fa-solid fa-droplet"></i>
+          <span class="pct" id="pct-water">100%</span>
+        </div>
+
+        <!-- Stamina Pod (Running / Sprint) -->
+        <div class="status-box stamina" id="pod-stamina">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-stamina" style="height: 100%;"></div>
+          </div>
+          <i class="fa-solid fa-person-running"></i>
+          <span class="pct" id="pct-stamina">100%</span>
+        </div>
+
+        <!-- Stress Pod (Brain) -->
+        <div class="status-box stress" id="pod-stress" style="display: none;">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-stress" style="height: 0%;"></div>
+          </div>
+          <i class="fa-solid fa-brain"></i>
+          <span class="pct" id="pct-stress">0%</span>
+        </div>
+
+        <!-- Oxygen Pod (Lungs) -->
+        <div class="status-box oxygen hidden" id="pod-oxygen">
+          <div class="liquid-container">
+            <div class="liquid-fill" id="liquid-oxygen" style="height: 100%;"></div>
+          </div>
+          <i class="fa-solid fa-lungs"></i>
+          <span class="pct" id="pct-oxygen">100%</span>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- 3. BOTTOM CENTER: COMPASS & STREET — Premium Arc -->
+    <div id="bottom-center" class="draggable-module" data-module="bottom-center">
+      <!-- Arc Compass Widget -->
+      <div class="compass-arc-wrap">
+        <svg class="compass-arc-svg" viewBox="0 0 54 32" id="compass-arc-svg">
+          <!-- Background tick marks -->
+          <line class="compass-tick" x1="4" y1="29" x2="4" y2="24" />
+          <line class="compass-tick" x1="13" y1="16" x2="15" y2="20" />
+          <line class="compass-tick major" x1="27" y1="12" x2="27" y2="17" />
+          <line class="compass-tick" x1="41" y1="16" x2="39" y2="20" />
+          <line class="compass-tick" x1="50" y1="29" x2="50" y2="24" />
+          <!-- Track arc -->
+          <path class="compass-arc-track" d="M4,29 A27,27 0 0,1 50,29" />
+          <!-- Active glow arc (dynamic via JS) -->
+          <path class="compass-arc-active" id="compass-arc-active" d="M4,29 A27,27 0 0,1 50,29" stroke-dasharray="75.4" stroke-dashoffset="37.7" />
+          <!-- Cardinal label in center -->
+          <text class="compass-arc-label" id="compass-arc-label" x="27" y="25">N</text>
+        </svg>
+        <div class="compass-degree" id="compass-degree">000°</div>
+      </div>
+      <!-- Hidden legacy element kept for JS compat -->
+      <div class="compass-heading" id="compass-heading" style="display:none">N</div>
+      <div class="location-info">
+        <div class="street-name" id="street-name">Los Santos</div>
+        <div class="zone-name" id="zone-name">San Andreas</div>
+      </div>
+    </div>
+
+    <!-- 4. Bas droite : HUD d'arme (masqué par défaut) -->
+    <div id="weapon-hud" class="draggable-module" data-module="weapon-hud">
+      <div class="weapon-badge" id="weapon-badge">
+        <div id="weapon-icon-box">
+          <i class="fa-solid fa-gun" id="weapon-icon"></i>
+        </div>
+      </div>
+      
+      <div class="weapon-info-col">
+        <div class="weapon-name" id="weapon-name">Arme</div>
+        <div class="weapon-sub-row">
+          <div class="fire-mode-tag" id="fire-mode"><i class="fa-solid fa-circle" style="font-size: 5px;"></i> SEMI-AUTO</div>
+          <div class="weapon-attachments-container" id="weapon-attachments"></div>
+        </div>
+      </div>
+
+      <div class="weapon-divider"></div>
+
+      <div class="ammo-digits-box" id="ammo-digits-box">
+        <span class="ammo-clip" id="ammo-clip">0</span>
+        <span class="ammo-reserve">/ <span id="ammo-total">0</span></span>
+      </div>
+
+      <div class="reload-progress-bar" id="reload-progress-bar"></div>
+    </div>
+
+  </div>
+
+  <!-- 6. IN-GAME CONFIGURATION OVERLAY (/hud) -->
+  <div id="config-overlay"></div>
+  <div id="config-modal">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <div class="modal-logo">BL</div>
+        <div class="modal-title">CONFIGURATION DU HUD</div>
+        <span class="modal-cmd-badge">/hud</span>
+      </div>
+      <button class="modal-close" id="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- NAVIGATION PAR ONGLETS -->
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tab-btn-modules" data-tab="tab-modules">
+        <i class="fa-solid fa-sliders"></i> Modules & HUD
+      </button>
+      <button class="modal-tab" id="tab-btn-announcements" data-tab="tab-announcements">
+        <i class="fa-solid fa-bullhorn"></i> Annonces & Pubs
+      </button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- ONGLET 1: MODULES & POSITIONNEMENT -->
+      <div id="tab-modules" class="tab-pane active">
+
+        <div class="config-section-title">Positionnement & Déplacement</div>
+        <div class="move-mode-box">
+          <div class="slider-info">
+            <div class="label">Personnaliser l'emplacement</div>
+            <div class="sub">Glisse et dépose les modules ou réaligne</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="move-btn" id="btn-snap-minimap-modal" style="background: rgba(0,206,201,0.18); border: 1px solid rgba(0,206,201,0.45); color: #00cec9; box-shadow: none;" title="Réaligner automatiquement au-dessus de la minimap GTA"><i class="fa-solid fa-map-pin"></i> Minimap</button>
+            <button class="move-btn" id="btn-start-move"><i class="fa-solid fa-arrows-up-down-left-right"></i> Déplacer</button>
+          </div>
+        </div>
+        <div class="move-mode-box" id="carhud-config-box" style="display: none; margin-top: 8px;">
+          <div class="slider-info">
+            <div class="label"><i class="fa-solid fa-gauge-high" style="color: var(--c-red); margin-right: 4px;"></i> HUD Véhicule (Compteur)</div>
+            <div class="sub">Personnaliser l'emplacement du compteur de vitesse</div>
+          </div>
+          <div>
+            <button class="move-btn" id="btn-move-carhud" style="background: linear-gradient(135deg, rgba(229, 9, 20, 0.3) 0%, rgba(18, 22, 32, 0.9) 100%); border: 1px solid rgba(229, 9, 20, 0.55); color: #fff;"><i class="fa-solid fa-car-side"></i> Déplacer Compteur</button>
+          </div>
+        </div>
+
+        <div class="config-section-title" style="margin-top: 6px;">Affichage des Modules</div>
+        <div class="toggle-grid">
+          
+          <div class="toggle-item">
+            <span>Infos Serveur</span>
+            <label class="switch"><input type="checkbox" id="chk-server" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Infos Joueur & Date</span>
+            <label class="switch"><input type="checkbox" id="chk-player" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Météo & Température</span>
+            <label class="switch"><input type="checkbox" id="chk-weather" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Joueurs Connectés</span>
+            <label class="switch"><input type="checkbox" id="chk-online" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Badge ID Joueur</span>
+            <label class="switch"><input type="checkbox" id="chk-id" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Compteur FPS & MS</span>
+            <label class="switch"><input type="checkbox" id="chk-tech" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Argent Cash</span>
+            <label class="switch"><input type="checkbox" id="chk-cash" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Compte Banque</span>
+            <label class="switch"><input type="checkbox" id="chk-bank" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Argent Sale</span>
+            <label class="switch"><input type="checkbox" id="chk-dirty" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Compte Entreprise</span>
+            <label class="switch"><input type="checkbox" id="chk-society" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Endurance / Course</span>
+            <label class="switch"><input type="checkbox" id="chk-stamina" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Boussole & Rues</span>
+            <label class="switch"><input type="checkbox" id="chk-compass" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>HUD Armes & Munitions</span>
+            <label class="switch"><input type="checkbox" id="chk-weapon" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Fréquence Radio</span>
+            <label class="switch"><input type="checkbox" id="chk-radio" checked><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Masquer armure si 0%</span>
+            <label class="switch"><input type="checkbox" id="chk-hide-armor"><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Mode Cinématique (21:9)</span>
+            <label class="switch"><input type="checkbox" id="chk-cinema"><span class="slider"></span></label>
+          </div>
+
+          <div class="toggle-item">
+            <span>Overlay Pub / Annonces</span>
+            <label class="switch"><input type="checkbox" id="chk-announce" checked><span class="slider"></span></label>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ONGLET 2: GESTION DES ANNONCES & PUBS -->
+      <div id="tab-announcements" class="tab-pane" style="display: none;">
+        
+        <div class="ann-config-top">
+          <div class="ann-config-row">
+            <div class="slider-info">
+              <div class="label"><i class="fa-solid fa-bullhorn" style="color: var(--c-red); margin-right: 4px;"></i> Bandeau d'annonces actif</div>
+              <div class="sub">Afficher les publicités & messages rotatifs</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="ann-cfg-enabled" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="ann-config-row">
+            <div class="slider-info">
+              <div class="label"><i class="fa-solid fa-stopwatch" style="color: #00cec9; margin-right: 4px;"></i> Intervalle de rotation</div>
+              <div class="sub">Durée d'affichage par message</div>
+            </div>
+            <div class="ann-interval-control">
+              <input type="number" id="ann-cfg-interval" min="3" max="60" step="0.5" value="8.5">
+              <span>sec</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann-items-header">
+          <div class="config-section-title">Liste des Annonces (<span id="ann-count-badge">0</span>)</div>
+          <button class="ann-add-btn" id="btn-add-ann-item"><i class="fa-solid fa-plus"></i> Nouvelle Annonce</button>
+        </div>
+
+        <!-- LISTE DES ANNONCES ROTATIVES -->
+        <div id="ann-items-list" class="ann-items-list">
+          <!-- Injecté dynamiquement par JS -->
+        </div>
+
+        <!-- FORMULAIRE D'ÉDITION D'UNE ANNONCE -->
+        <div id="ann-editor-card" class="ann-editor-card" style="display: none;">
+          <div class="ann-editor-header">
+            <div class="ann-editor-title" id="ann-editor-modal-title">MODIFIER L'ANNONCE</div>
+            <button class="ann-editor-close" id="btn-cancel-ann-edit"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="ann-editor-fields">
+            <div class="ann-field-row">
+              <div class="ann-field">
+                <label>TAG / CATÉGORIE</label>
+                <input type="text" id="ann-edit-tag" placeholder="DISCORD, BOUTIQUE, REPORT...">
+              </div>
+              <div class="ann-field">
+                <label>BOUTON CTA</label>
+                <input type="text" id="ann-edit-cta" placeholder="REJOINDRE, VISITER...">
+              </div>
+            </div>
+
+            <div class="ann-field">
+              <label>TITRE PRINCIPAL</label>
+              <input type="text" id="ann-edit-title" placeholder="Ex: REJOINS LA COMMUNAUTÉ">
+            </div>
+
+            <div class="ann-field">
+              <label>DESCRIPTION / LIEN / MESSAGE</label>
+              <input type="text" id="ann-edit-text" placeholder="Ex: discord.gg/bloodleak ou /report">
+            </div>
+
+            <div class="ann-field">
+              <label>ICÔNE FONTAWESOME</label>
+              <div class="ann-icon-input-row">
+                <input type="text" id="ann-edit-icon" placeholder="fa-brands fa-discord">
+                <div class="ann-icon-preview" id="ann-edit-icon-preview"><i class="fa-brands fa-discord"></i></div>
+              </div>
+              <div class="ann-icon-chips">
+                <button type="button" class="ann-chip" data-icon="fa-brands fa-discord" title="Discord"><i class="fa-brands fa-discord"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-cart-shopping" title="Boutique"><i class="fa-solid fa-cart-shopping"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-headset" title="Support"><i class="fa-solid fa-headset"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-trophy" title="Événement"><i class="fa-solid fa-trophy"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-bullhorn" title="Annonce"><i class="fa-solid fa-bullhorn"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-globe" title="Site Web"><i class="fa-solid fa-globe"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-book" title="Règlement"><i class="fa-solid fa-book"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-star" title="VIP"><i class="fa-solid fa-star"></i></button>
+                <button type="button" class="ann-chip" data-icon="fa-solid fa-shield-halved" title="Sécurité"><i class="fa-solid fa-shield-halved"></i></button>
+              </div>
+            </div>
+
+            <div class="ann-field">
+              <label>COULEUR D'ACCENT & GLOW</label>
+              <div class="ann-color-row">
+                <input type="color" id="ann-edit-color" value="#5865F2">
+                <div class="ann-color-chips">
+                  <span class="color-dot" data-color="#5865F2" style="background: #5865F2;" title="Bleu Discord"></span>
+                  <span class="color-dot" data-color="#FF2A2A" style="background: #FF2A2A;" title="Rouge BloodLeak"></span>
+                  <span class="color-dot" data-color="#00E5FF" style="background: #00E5FF;" title="Cyan Tech"></span>
+                  <span class="color-dot" data-color="#FFB800" style="background: #FFB800;" title="Or / Event"></span>
+                  <span class="color-dot" data-color="#2ECC71" style="background: #2ECC71;" title="Vert Émeraude"></span>
+                  <span class="color-dot" data-color="#A29BFE" style="background: #A29BFE;" title="Violet Pastel"></span>
+                  <span class="color-dot" data-color="#E67E22" style="background: #E67E22;" title="Orange Flamme"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- APERÇU EN DIRECT DE L'ANNONCE -->
+            <div class="ann-preview-box">
+              <div class="ann-preview-lbl">APERÇU EN DIRECT DU BANDEAU</div>
+              <div class="ann-preview-banner" id="ann-live-preview">
+                <div class="card-accent-bar"></div>
+                <div class="ann-ambient-glow"></div>
+                <div class="ann-prev-icon" id="prev-icon-box"><i class="fa-brands fa-discord" id="prev-icon"></i></div>
+                <div class="ann-prev-info">
+                  <div class="ann-prev-top">
+                    <span class="ann-prev-title" id="prev-title">COMMUNAUTÉ OFFICIELLE</span>
+                  </div>
+                  <div class="ann-prev-bottom">
+                    <span class="pulse-dot"></span>
+                    <span class="ann-prev-sponsor"><i class="fa-solid fa-star"></i> PUB</span>
+                    <span class="ann-prev-tag" id="prev-tag">DISCORD</span>
+                    <span class="ann-dot-sep">•</span>
+                    <span class="ann-prev-desc" id="prev-text">discord.gg/bloodleak</span>
+                  </div>
+                </div>
+                <div class="ann-prev-cta" id="prev-cta">REJOINDRE</div>
+              </div>
+            </div>
+
+            <div class="ann-editor-btns">
+              <button class="btn btn-secondary" id="btn-ann-form-cancel">Annuler</button>
+              <button class="btn btn-primary" id="btn-ann-form-save"><i class="fa-solid fa-check"></i> Valider l'annonce</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACTIONS GLOBALES ANNONCES -->
+        <div class="ann-global-actions" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; gap: 8px;">
+            <button class="move-btn" id="btn-save-server-ann" style="flex: 1; background: linear-gradient(135deg, rgba(230,33,33,0.3) 0%, rgba(18,22,32,0.95) 100%); border: 1px solid rgba(230,33,33,0.6); color: #fff; padding: 9px;" title="Sauvegarde sur le serveur pour tous les joueurs"><i class="fa-solid fa-server"></i> Sauvegarder Serveur (Admin)</button>
+            <button class="move-btn" id="btn-reset-default-ann" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #ddd; padding: 9px;" title="Restaurer les annonces par défaut"><i class="fa-solid fa-rotate-left"></i> Rétablir</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="btn-reset-config">Réinitialiser Tout</button>
+      <button class="btn btn-primary" id="btn-save-config">Sauvegarder</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // Nom de ressource dynamique (les callbacks NUI cassaient si le dossier était renommé)
+    const NUI_URL = 'https://' + (typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'bl_hud_pl') + '/';
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // --- SONS (WEB AUDIO API) ---
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      },
+      playTone(freq, type, duration, gainVal = 0.05) {
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+      },
+      click() { this.playTone(800, 'sine', 0.04, 0.03); },
+      toggle() { this.playTone(1200, 'sine', 0.05, 0.04); },
+      modalOpen() {
+        this.playTone(520, 'sine', 0.08, 0.05);
+        setTimeout(() => this.playTone(780, 'sine', 0.08, 0.04), 50);
+      },
+      cinema() {
+        this.playTone(220, 'triangle', 0.25, 0.06);
+      }
+    };
+
+    // Silhouettes SVG réalistes et épurées selon le type d'arme
+    const WeaponSVGs = {
+      pistol: `<svg viewBox="0 0 24 24"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h11a1 1 0 0 1 1 1v1h3.5a1 1 0 0 1 1 1v2.5a1 1 0 0 1-1 1H17v1.5a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5V13.5h-3v1.8a1 1 0 0 1-.6.92l-2.1 1.05a1 1 0 0 1-.45.11H7a1 1 0 0 1-1-1v-2.88H4.5A1.5 1.5 0 0 1 3 12.12v-3.62z"/></svg>`,
+      rifle: `<svg viewBox="0 0 24 24"><path d="M1.5 11h2.5v-1h5.5v1h7V9.5h1.5v1.5h3.5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H19v1.2a.8.8 0 0 1-.8.8h-1.4v2.5a.5.5 0 0 1-.5.5h-1.1a.5.5 0 0 1-.5-.45l-.4-2.55h-2.5v1.8a.5.5 0 0 1-.5.5h-1.5a.5.5 0 0 1-.5-.5v-1.8H7l-3 1.5a.5.5 0 0 1-.5-.1L1.5 14v-3z"/></svg>`,
+      smg: `<svg viewBox="0 0 24 24"><path d="M2.5 10.5A1 1 0 0 1 3.5 9.5h11a1 1 0 0 1 1 1v1h3.5a.5.5 0 0 1 .5.5v1.5a.5.5 0 0 1-.5.5H16v1.2a.8.8 0 0 1-.8.8h-1.2v3.5a.5.5 0 0 1-.5.5h-1.5a.5.5 0 0 1-.5-.5V14.5H9v2a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5v-2H3.5a1 1 0 0 1-1-1v-3z"/></svg>`,
+      shotgun: `<svg viewBox="0 0 24 24"><path d="M1.5 11.5a.5.5 0 0 1 .5-.5h5l2.5 1h9.5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H10l-2-1H4v1.5a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-2.5z"/></svg>`,
+      sniper: `<svg viewBox="0 0 24 24"><path d="M1 12.5a.5.5 0 0 1 .5-.5h2v-1h2v1h5.5V10h4v2H22a.5.5 0 0 1 .5.5v.8a.5.5 0 0 1-.5.5h-5.5v1.2a.8.8 0 0 1-.8.8h-1.7v2a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5V15H9v1.5a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5V15H3l-1.5-.7a.5.5 0 0 1-.5-.4v-1.4zm10-3h4v1h-4v-1z"/></svg>`,
+      mg: `<svg viewBox="0 0 24 24"><path d="M2 11h7v-1.5h6V11h5.5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H18v1.5a.8.8 0 0 1-.8.8h-1.7v2.2a.5.5 0 0 1-.5.5h-2.5a.5.5 0 0 1-.5-.5v-2.2H9v1.5a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5V14H3.5l-1.5-1V11z"/></svg>`,
+      knife: `<svg viewBox="0 0 24 24"><path d="M20.7 3.3a1 1 0 0 0-1.4 0l-7.8 7.8-1.5-1.5a1 1 0 0 0-1.4 1.4l1.5 1.5-6.8 6.8a1.5 1.5 0 0 0 0 2.1l.6.6a1.5 1.5 0 0 0 2.1 0l6.8-6.8 1.5 1.5a1 1 0 0 0 1.4-1.4l-1.5-1.5 7.8-7.8a1 1 0 0 0 0-1.4l-1.3-1.3z"/></svg>`,
+      melee: `<svg viewBox="0 0 24 24"><path d="M19.7 4.3a1.5 1.5 0 0 0-2.1 0L4.3 17.6a1.5 1.5 0 0 0 0 2.1l.5.5a1.5 1.5 0 0 0 2.1 0L20.2 6.9a1.5 1.5 0 0 0 0-2.1l-.5-.5z"/></svg>`,
+      bomb: `<svg viewBox="0 0 24 24"><path d="M12 2a1 1 0 0 1 1 1v1.1c3.4.5 6 3.4 6 6.9 0 3.9-3.1 7-7 7s-7-3.1-7-7c0-3.5 2.6-6.4 6-6.9V3a1 1 0 0 1 1-1zm0 4a5 5 0 0 0-5 5c0 2.8 2.2 5 5 5s5-2.2 5-5a5 5 0 0 0-5-5zm-2-4h4a1 1 0 1 1 0 2h-4a1 1 0 1 1 0-2z"/></svg>`,
+      taser: `<svg viewBox="0 0 24 24"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h9a1 1 0 0 1 1 1v1.5h3.5a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5H15v2a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5V14h-2v2.5a.5.5 0 0 1-.5.5H9a.5.5 0 0 1-.5-.5V14H4.5A1.5 1.5 0 0 1 3 12.5v-4zm11 2.5h2v-1h-2v1z"/></svg>`
+    };
+
+    const state = {
+      scale: 1.0,
+      inVehicle: false,
+      health: 100, armor: 0, food: 100, water: 100, stamina: 100, stress: 0, oxygen: 100,
+      voiceRange: 2, talking: false,
+      cash: 0, bank: 0, dirty: 0, society: 0, moneyMasked: false,
+      id: 1, name: 'Joueur', job: 'Sans-emploi', grade: 'Citoyen',
+      playersCount: 1, maxPlayers: 128, fps: 60, ping: 20,
+      radioActive: false, radioFreq: '',
+      heading: 'N', headingDeg: 0, street: 'Los Santos', zone: 'San Andreas',
+      weaponShow: false, weaponName: 'Arme', clip: 0, ammo: 0, maxClip: 0, fireMode: 'Semi-Auto', weaponIcon: 'fa-solid fa-gun', 
+      weaponType: 'pistol', isMelee: false, isLowAmmo: false, isReloading: false, isSilenced: false, hasFlashlight: false, hasScope: false,
+      hideArmorWhenEmpty: false,
+      cinematic: false,
+      weather: { icon: 'fa-solid fa-sun', color: '#f1c40f', temp: 24, label: 'Ensoleillé' },
+      modules: {
+        server: true, player: true, weather: true, online: true, tech: true, id: true, cash: true, bank: true, dirty: true,
+        society: true, stamina: true, compass: true, weapon: true, radio: true, announce: true
+      },
+      announcements: { enabled: true, interval: 8500, items: [] },
+      positions: {},
+      serverDefaults: {},
+      minimapPosition: { left: 48, bottom: 245, width: 270, height: 190 },
+      hasCarHud: false,
+      isAdmin: false,
+      aiming: false
+    };
+
+    const CIRCLE_PERIMETER = 113.1;
+
+    const $ = id => document.getElementById(id);
+    const UI = {
+      hudContainer: $('hud-container'),
+      configModal: $('config-modal'),
+      editModeBar: $('edit-mode-bar'),
+      cinemaTop: $('cinema-top'),
+      cinemaBottom: $('cinema-bottom'),
+      liquids: {
+        health: $('liquid-health'), armor: $('liquid-armor'), food: $('liquid-food'),
+        water: $('liquid-water'), stamina: $('liquid-stamina'), stress: $('liquid-stress'),
+        oxygen: $('liquid-oxygen'), voice: $('liquid-voice')
+      },
+      progOnline: $('prog-online'),
+      pcts: {
+        health: $('pct-health'), armor: $('pct-armor'), food: $('pct-food'),
+        water: $('pct-water'), stamina: $('pct-stamina'), stress: $('pct-stress'), oxygen: $('pct-oxygen')
+      },
+      mods: {
+        metaRow: $('mod-meta-row'), id: $('mod-id-pill'),
+        tech: $('mod-tech'), serverRow: $('mod-server-row'), server: $('mod-server'), online: $('mod-online'),
+        playerRow: $('mod-player-row'), player: $('mod-player'), date: $('mod-date'),
+        cashRow: $('mod-cash-row'), weather: $('mod-weather'),
+        cash: $('mod-cash'), bank: $('mod-bank'), dirty: $('mod-dirty'), society: $('mod-society'),
+        compass: $('bottom-center'), weapon: $('weapon-hud'), radio: $('mod-radio')
+      },
+      draggables: {
+        topRight: $('top-right'),
+        bottomCenter: $('bottom-center'),
+        weaponHud: $('weapon-hud'),
+        bottomLeft: $('bottom-left'),
+        announcement: $('hud-announcement')
+      },
+      bottomLeft: $('bottom-left'),
+      announcement: $('hud-announcement'),
+      annIconBox: $('ann-icon-box'),
+      annIcon: $('ann-icon'),
+      annTag: $('ann-tag'),
+      annTitle: $('ann-title'),
+      annText: $('ann-text'),
+      annCta: $('ann-cta'),
+      annCtaBox: $('ann-cta-box'),
+      annPips: $('ann-pips'),
+      annProgressFill: $('ann-progress-fill'),
+      pods: {
+        armor: $('pod-armor'), stamina: $('pod-stamina'), stress: $('pod-stress'),
+        oxygen: $('pod-oxygen'), voice: $('pod-voice')
+      },
+      vCash: $('val-cash'), vBank: $('val-bank'), vDirty: $('val-dirty'), vSociety: $('val-society'),
+      vPlayers: $('val-players'),
+      valPlayerId: $('val-player-id'),
+      weatherIcon: $('weather-icon'), weatherTemp: $('weather-temp'),
+      vFps: $('val-fps'), vPing: $('val-ping'),
+      pctVoice: $('pct-voice'),
+      rpId: $('rp-id'), rpName: $('rp-name'), rpJob: $('rp-job'), rpGrade: $('rp-grade'),
+      dateDay: $('date-day'), dateNum: $('date-num'), micId: $('mic-id'),
+      vRadio: $('val-radio'),
+      compassHeading: $('compass-heading'), streetName: $('street-name'), zoneName: $('zone-name'),
+      weaponIcon: $('weapon-icon'), weaponIconBox: $('weapon-icon-box'), weaponBadge: $('weapon-badge'),
+      weaponName: $('weapon-name'), ammoClip: $('ammo-clip'), ammoTotal: $('ammo-total'), 
+      fireMode: $('fire-mode'), ammoDigitsBox: $('ammo-digits-box'),
+      weaponAttachments: $('weapon-attachments'), reloadProgressBar: $('reload-progress-bar'),
+      // Config & Demo
+      configOverlay: $('config-overlay'),
+      btnStartMove: $('btn-start-move'),
+      btnSnapMinimap: $('btn-snap-minimap'),
+      btnSnapMinimapModal: $('btn-snap-minimap-modal'),
+      btnSavePositions: $('btn-save-positions'),
+      btnResetPositions: $('btn-reset-positions'),
+      btnCloseModal: $('btn-close-modal'),
+      btnSaveConfig: $('btn-save-config'),
+      btnResetConfig: $('btn-reset-config'),
+      carhudConfigBox: $('carhud-config-box'),
+      btnMoveCarhud: $('btn-move-carhud'),
+      btnEditCarhud: $('btn-edit-carhud'),
+      demoConfigBtn: $('demo-config-btn'),
+      demoVehicleBtn: $('demo-vehicle-btn'),
+      demoCinemaBtn: $('demo-cinema-btn'),
+      // Tabs
+      tabBtnModules: $('tab-btn-modules'),
+      tabBtnAnnouncements: $('tab-btn-announcements'),
+      tabPaneModules: $('tab-modules'),
+      tabPaneAnnouncements: $('tab-announcements'),
+      // Announcements Management
+      annCfgEnabled: $('ann-cfg-enabled'),
+      annCfgInterval: $('ann-cfg-interval'),
+      annCountBadge: $('ann-count-badge'),
+      btnAddAnnItem: $('btn-add-ann-item'),
+      annItemsList: $('ann-items-list'),
+      annEditorCard: $('ann-editor-card'),
+      annEditorModalTitle: $('ann-editor-modal-title'),
+      btnCancelAnnEdit: $('btn-cancel-ann-edit'),
+      annEditTag: $('ann-edit-tag'),
+      annEditCta: $('ann-edit-cta'),
+      annEditTitle: $('ann-edit-title'),
+      annEditText: $('ann-edit-text'),
+      annEditIcon: $('ann-edit-icon'),
+      annEditIconPreview: $('ann-edit-icon-preview'),
+      annEditColor: $('ann-edit-color'),
+      annLivePreview: $('ann-live-preview'),
+      prevIconBox: $('prev-icon-box'),
+      prevIcon: $('prev-icon'),
+      prevTag: $('prev-tag'),
+      prevTitle: $('prev-title'),
+      prevText: $('prev-text'),
+      prevCta: $('prev-cta'),
+      btnAnnFormCancel: $('btn-ann-form-cancel'),
+      btnAnnFormSave: $('btn-ann-form-save'),
+      btnSaveServerAnn: $('btn-save-server-ann'),
+      btnResetDefaultAnn: $('btn-reset-default-ann'),
+      chks: {
+        server: $('chk-server'), player: $('chk-player'), weather: $('chk-weather'), online: $('chk-online'), tech: $('chk-tech'), id: $('chk-id'),
+        cash: $('chk-cash'), bank: $('chk-bank'), dirty: $('chk-dirty'), society: $('chk-society'),
+        stamina: $('chk-stamina'), compass: $('chk-compass'), weapon: $('chk-weapon'), radio: $('chk-radio'),
+        announce: $('chk-announce'), hideArmor: $('chk-hide-armor'), cinema: $('chk-cinema')
+      }
+    };
+
+    // --- DYNAMIC MINIMAP POSITION ANCHORING ---
+    function applyMinimapPosition(pos, force = false) {
+      if(!pos) return;
+      state.minimapPosition = pos;
+      const leftPx = pos.left;
+      const bottomPx = pos.bottom;
+      
+      document.documentElement.style.setProperty('--minimap-left', leftPx + 'px');
+      document.documentElement.style.setProperty('--minimap-bottom', bottomPx + 'px');
+      if(pos.width) document.documentElement.style.setProperty('--minimap-width', pos.width + 'px');
+      if(pos.height) document.documentElement.style.setProperty('--minimap-height', pos.height + 'px');
+
+      // Si l'utilisateur n'a pas défini de position manuelle ou si force=true, on ancre au-dessus de la minimap
+      if(UI.bottomLeft && (!state.positions['bottom-left'] || force)) {
+        UI.bottomLeft.style.left = leftPx + 'px';
+        UI.bottomLeft.style.bottom = bottomPx + 'px';
+        UI.bottomLeft.style.top = 'auto';
+        UI.bottomLeft.style.right = 'auto';
+        UI.bottomLeft.style.transform = 'none';
+      }
+      if(UI.announcement && (!state.positions['hud-announcement'] || force)) {
+        UI.announcement.style.left = leftPx + 'px';
+        UI.announcement.style.bottom = (bottomPx + 54) + 'px';
+        UI.announcement.style.top = 'auto';
+        UI.announcement.style.right = 'auto';
+        UI.announcement.style.transform = 'none';
+      }
+    }
+
+    function snapBottomLeftToMinimap() {
+      AudioEngine.click();
+      delete state.positions['bottom-left'];
+      delete state.positions['hud-announcement'];
+      try {
+        localStorage.setItem('bloodleak_hud_positions', JSON.stringify(state.positions));
+        fetch(NUI_URL + 'savePositions', {
+          method: 'POST',
+          body: JSON.stringify(state.positions)
+        });
+      } catch(e) {}
+      if(state.minimapPosition) {
+        applyMinimapPosition(state.minimapPosition, true);
+      }
+    }
+
+    // --- VEHICLE / MINIMAP ADAPTATION ---
+    function setVehicleState(inVeh) {
+      state.inVehicle = inVeh;
+      document.body.classList.toggle('in-vehicle', inVeh);
+      updateAnnouncementVisibility();
+      if(state.minimapPosition) {
+        applyMinimapPosition(state.minimapPosition);
+      }
+    }
+
+    // --- CINEMATIC MODE ---
+    function setCinematic(active) {
+      state.cinematic = active;
+      document.body.classList.toggle('cinematic-active', active);
+      if(UI.chks.cinema) UI.chks.cinema.checked = active;
+      updateAnnouncementVisibility();
+      AudioEngine.cinema();
+    }
+
+    // --- DRAG & DROP POSITIONING SYSTEM ---
+    let isEditMode = false;
+    let activeDragElem = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    function setEditMode(active) {
+      isEditMode = active;
+      document.body.classList.toggle('edit-mode', active);
+      UI.editModeBar.classList.toggle('active', active);
+      if(active) {
+        UI.configModal.classList.remove('open');
+        if(UI.configOverlay) UI.configOverlay.classList.remove('open');
+        // Prévisualisation et activation pour déplacement de l'overlay de pub
+        if(UI.announcement) {
+          UI.announcement.style.display = 'flex';
+          showAnnouncementItem(currentAnnounceIdx);
+        }
+        // Prévisualisation pour permettre de voir et déplacer le HUD d'arme s'il n'est pas actif
+        if(!state.weaponShow) {
+          UI.weaponName.textContent = 'Pistolet Combat';
+          UI.ammoClip.textContent = '12';
+          UI.ammoTotal.textContent = '48';
+          UI.fireMode.className = 'fire-mode-tag';
+          UI.fireMode.innerHTML = `<i class="fa-solid fa-circle" style="font-size: 5px;"></i> SEMI-AUTO`;
+          if (UI.weaponIconBox) UI.weaponIconBox.innerHTML = WeaponSVGs.pistol;
+          if (UI.weaponAttachments) {
+            UI.weaponAttachments.innerHTML = `<span class="attachment-tag silencer"><i class="fa-solid fa-volume-xmark"></i> SIL</span>`;
+          }
+          if (UI.ammoDigitsBox) UI.ammoDigitsBox.classList.remove('is-melee');
+        }
+      } else {
+        renderExtras();
+        if(!state.positions['bottom-left'] && state.minimapPosition) {
+          applyMinimapPosition(state.minimapPosition, true);
+        }
+      }
+    }
+
+    function initDragAndDrop() {
+      const draggables = document.querySelectorAll('.draggable-module');
+
+      draggables.forEach(elem => {
+        elem.addEventListener('mousedown', (e) => {
+          if(!isEditMode) return;
+          e.preventDefault();
+          AudioEngine.click();
+          activeDragElem = elem;
+          const rect = elem.getBoundingClientRect();
+          dragOffsetX = e.clientX - rect.left;
+          dragOffsetY = e.clientY - rect.top;
+        });
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if(!isEditMode || !activeDragElem) return;
+        e.preventDefault();
+        
+        let newX = e.clientX - dragOffsetX;
+        let newY = e.clientY - dragOffsetY;
+
+        newX = Math.max(10, Math.min(window.innerWidth - activeDragElem.offsetWidth - 10, newX));
+        newY = Math.max(10, Math.min(window.innerHeight - activeDragElem.offsetHeight - 10, newY));
+
+        activeDragElem.style.left = newX + 'px';
+        activeDragElem.style.top = newY + 'px';
+        activeDragElem.style.right = 'auto';
+        activeDragElem.style.bottom = 'auto';
+        activeDragElem.style.transform = 'none';
+
+        const modKey = activeDragElem.getAttribute('data-module');
+        if(modKey) {
+          state.positions[modKey] = { left: newX, top: newY };
+        }
+
+        // Si l'utilisateur déplace le bloc des jauges et n'a pas encore dissocié l'overlay d'annonces, on le déplace avec
+        if(modKey === 'bottom-left' && !state.positions['hud-announcement'] && UI.announcement) {
+          UI.announcement.style.left = newX + 'px';
+          UI.announcement.style.top = Math.max(10, newY - 68) + 'px';
+          UI.announcement.style.bottom = 'auto';
+          UI.announcement.style.right = 'auto';
+          UI.announcement.style.transform = 'none';
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if(activeDragElem) {
+          activeDragElem = null;
+        }
+      });
+    }
+
+    function applyPositions(positionsMap) {
+      if(!positionsMap || typeof positionsMap !== 'object') return;
+      Object.keys(positionsMap).forEach(key => {
+        const el = document.querySelector(`.draggable-module[data-module="${key}"]`);
+        if(el && positionsMap[key]) {
+          let left = positionsMap[key].left;
+          let top = positionsMap[key].top;
+          if(typeof left === 'number' && typeof top === 'number') {
+            left = Math.max(10, Math.min(window.innerWidth - 80, left));
+            top = Math.max(10, Math.min(window.innerHeight - 50, top));
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+            el.style.transform = 'none';
+            state.positions[key] = { left: left, top: top };
+          }
+        }
+      });
+    }
+
+    function savePositions() {
+      AudioEngine.click();
+      try {
+        localStorage.setItem('bloodleak_hud_positions', JSON.stringify(state.positions));
+        fetch(NUI_URL + 'savePositions', {
+          method: 'POST',
+          body: JSON.stringify(state.positions)
+        });
+      } catch(e) {}
+      setEditMode(false);
+      toggleSettings(true);
+    }
+
+    function saveServerDefaultPositions() {
+      AudioEngine.click();
+      try {
+        fetch(NUI_URL + 'saveServerDefaultPositions', {
+          method: 'POST',
+          body: JSON.stringify(state.positions)
+        });
+      } catch(e) {}
+    }
+
+    function resetPositions() {
+      AudioEngine.click();
+      state.positions = {};
+      try {
+        localStorage.removeItem('bloodleak_hud_positions');
+      } catch(e) {}
+
+      Object.values(UI.draggables).forEach(el => {
+        if(el) {
+          el.style.left = '';
+          el.style.top = '';
+          el.style.right = '';
+          el.style.bottom = '';
+          el.style.transform = '';
+        }
+      });
+
+      if(UI.bottomLeft) {
+        UI.bottomLeft.style.left = '';
+        UI.bottomLeft.style.top = '';
+        UI.bottomLeft.style.right = '';
+        UI.bottomLeft.style.bottom = '';
+        UI.bottomLeft.style.transform = '';
+      }
+      if(UI.announcement) {
+        UI.announcement.style.left = '';
+        UI.announcement.style.top = '';
+        UI.announcement.style.right = '';
+        UI.announcement.style.bottom = '';
+        UI.announcement.style.transform = '';
+      }
+
+      if(state.serverDefaults && Object.keys(state.serverDefaults).length > 0) {
+        applyPositions(state.serverDefaults);
+      }
+      if(state.minimapPosition) {
+        applyMinimapPosition(state.minimapPosition, true);
+      }
+    }
+
+    function loadSavedPositions() {
+      try {
+        const savedMods = localStorage.getItem('bloodleak_hud_modules');
+        if(savedMods) {
+          const parsedMods = JSON.parse(savedMods);
+          if(parsedMods && typeof parsedMods === 'object') {
+            state.modules = Object.assign(state.modules, parsedMods);
+            state.modules.weapon = true;
+            Object.keys(state.modules).forEach(k => {
+              if(UI.chks[k]) UI.chks[k].checked = state.modules[k];
+            });
+            if(UI.chks.weapon) UI.chks.weapon.checked = true;
+          }
+        }
+        const saved = localStorage.getItem('bloodleak_hud_positions');
+        if(saved) {
+          state.positions = JSON.parse(saved) || {};
+          applyPositions(state.positions);
+        } else if(state.serverDefaults && Object.keys(state.serverDefaults).length > 0) {
+          applyPositions(state.serverDefaults);
+        }
+        if(!state.positions['bottom-left'] && state.minimapPosition) {
+          applyMinimapPosition(state.minimapPosition, true);
+        }
+      } catch(e) {}
+    }
+
+    UI.btnStartMove.addEventListener('click', () => {
+      AudioEngine.click();
+      setEditMode(true);
+    });
+    if(UI.btnSnapMinimap) UI.btnSnapMinimap.addEventListener('click', snapBottomLeftToMinimap);
+    if(UI.btnSnapMinimapModal) UI.btnSnapMinimapModal.addEventListener('click', snapBottomLeftToMinimap);
+    UI.btnSavePositions.addEventListener('click', savePositions);
+    UI.btnResetPositions.addEventListener('click', resetPositions);
+
+    function setHasCarHud(hasCarHud) {
+      state.hasCarHud = !!hasCarHud;
+      if(UI.carhudConfigBox) UI.carhudConfigBox.style.display = state.hasCarHud ? 'flex' : 'none';
+      if(UI.btnEditCarhud) UI.btnEditCarhud.style.display = state.hasCarHud ? 'inline-flex' : 'none';
+    }
+
+    function startCarHudEdit() {
+      AudioEngine.click();
+      toggleSettings(false);
+      setEditMode(false);
+      try {
+        fetch(NUI_URL + 'startCarHudEdit', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+      } catch(e) {}
+    }
+
+    if(UI.btnMoveCarhud) UI.btnMoveCarhud.addEventListener('click', startCarHudEdit);
+    if(UI.btnEditCarhud) UI.btnEditCarhud.addEventListener('click', startCarHudEdit);
+
+    const btnSaveServer = $('btn-save-server-default');
+    if(btnSaveServer) {
+      btnSaveServer.addEventListener('click', () => {
+        saveServerDefaultPositions();
+        btnSaveServer.innerHTML = '<i class="fa-solid fa-check"></i> Enregistré au serveur !';
+        setTimeout(() => {
+          btnSaveServer.innerHTML = '<i class="fa-solid fa-crown"></i> Définir par défaut (Serveur)';
+        }, 2500);
+      });
+    }
+
+
+
+    // --- SCALE & RENDERING ---
+    function applyScale(val = 1.0) {
+      state.scale = val;
+      document.documentElement.style.setProperty('--hud-scale', val);
+    }
+
+    function setLiquidProgress(key, val) {
+      const parsed = parseFloat(val);
+      const v = isNaN(parsed) ? 0 : Math.max(0, Math.min(100, parsed));
+      if(UI.liquids[key]) {
+        UI.liquids[key].style.height = v + '%';
+      }
+      if(UI.pcts[key]) {
+        UI.pcts[key].textContent = Math.round(v) + '%';
+      }
+    }
+
+    const CRITICAL_THRESHOLD = 25;
+
+    function setCriticalState(podEl, val) {
+      if (!podEl) return;
+      const parsed = parseFloat(val);
+      const num = isNaN(parsed) ? 0 : parsed;
+      podEl.classList.toggle('critical', num <= CRITICAL_THRESHOLD && num >= 0);
+    }
+
+    function renderStatus() {
+      setLiquidProgress('health', state.health);
+      setCriticalState($('pod-health'), state.health);
+      setLiquidProgress('armor', state.armor);
+      
+      if(state.hideArmorWhenEmpty && state.armor <= 0) {
+        UI.pods.armor.style.display = 'none';
+      } else {
+        UI.pods.armor.style.display = 'flex';
+      }
+
+      setLiquidProgress('food', state.food);
+      setCriticalState($('pod-food'), state.food);
+      setLiquidProgress('water', state.water);
+      setCriticalState($('pod-water'), state.water);
+
+      if(state.modules.stamina) {
+        UI.pods.stamina.style.display = 'flex';
+        setLiquidProgress('stamina', state.stamina);
+      } else {
+        UI.pods.stamina.style.display = 'none';
+      }
+      
+      setLiquidProgress('stress', state.stress);
+      UI.pods.stress.style.display = state.stress > 0 ? 'flex' : 'none';
+      
+      if(state.oxygen < 95) {
+        UI.pods.oxygen.classList.remove('hidden');
+        setLiquidProgress('oxygen', state.oxygen);
+      } else {
+        UI.pods.oxygen.classList.add('hidden');
+      }
+    }
+
+    function renderVoice() {
+      const mode = Math.max(1, Math.min(3, parseInt(state.voiceRange) || 2));
+      if(UI.pods.voice) {
+        UI.pods.voice.setAttribute('data-range', mode);
+        UI.pods.voice.classList.toggle('talking', Boolean(state.talking));
+      }
+      let lbl = 'NORM';
+      if(mode === 1) lbl = 'CHUCH';
+      else if(mode === 2) lbl = 'NORM';
+      else if(mode === 3) lbl = 'CRI';
+      
+      if(UI.pctVoice) {
+        UI.pctVoice.textContent = lbl;
+      }
+    }
+
+    function formatMoney(n) { return Number(n).toLocaleString('fr-FR') + '$'; }
+    function renderMoney() {
+      if(state.moneyMasked) {
+        UI.vCash.textContent = '****'; UI.vBank.textContent = '****'; 
+        UI.vDirty.textContent = '****'; UI.vSociety.textContent = '****';
+      } else {
+        UI.vCash.textContent = formatMoney(state.cash);
+        UI.vBank.textContent = formatMoney(state.bank);
+        UI.vDirty.textContent = formatMoney(state.dirty);
+        UI.vSociety.textContent = formatMoney(state.society);
+      }
+      UI.mods.dirty.style.display = (state.modules.dirty && state.dirty > 0) ? 'flex' : 'none';
+      UI.mods.society.style.display = (state.modules.society && state.society > 0) ? 'flex' : 'none';
+      UI.mods.cash.style.display = state.modules.cash ? 'flex' : 'none';
+      if(UI.mods.cashRow) UI.mods.cashRow.style.display = (state.modules.cash || state.modules.weather !== false) ? 'flex' : 'none';
+      UI.mods.bank.style.display = state.modules.bank ? 'flex' : 'none';
+    }
+
+    function renderWeather() {
+      if(UI.weatherIcon) {
+        UI.weatherIcon.className = state.weather.icon || 'fa-solid fa-sun';
+        if(state.weather.color) UI.weatherIcon.style.color = state.weather.color;
+      }
+      if(UI.weatherTemp) {
+        UI.weatherTemp.textContent = (state.weather.temp !== undefined ? state.weather.temp : '24') + '°';
+      }
+      if(UI.mods.weather) {
+        UI.mods.weather.title = state.weather.label || 'Météo';
+        UI.mods.weather.style.display = state.modules.weather !== false ? 'flex' : 'none';
+      }
+      if(UI.mods.cashRow) {
+        UI.mods.cashRow.style.display = (state.modules.cash || state.modules.weather !== false) ? 'flex' : 'none';
+      }
+    }
+
+    function renderInfo() {
+      if (UI.rpId) UI.rpId.textContent = state.id;
+      if (UI.valPlayerId) UI.valPlayerId.textContent = state.id;
+      if (UI.rpName) UI.rpName.textContent = state.name;
+      if (UI.rpJob) UI.rpJob.textContent = state.job;
+      if (UI.rpGrade) UI.rpGrade.textContent = state.grade;
+      if (UI.micId) UI.micId.textContent = 'ID: ' + state.id;
+      
+      const d = new Date();
+      // Jours en français
+      const daysFr = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+      if(UI.dateDay) UI.dateDay.textContent = daysFr[d.getDay()];
+      if(UI.dateNum) UI.dateNum.textContent = d.getDate();
+
+      if(UI.vPlayers) UI.vPlayers.textContent = state.playersCount;
+      if (UI.vFps) UI.vFps.textContent = state.fps;
+      if (UI.vPing) UI.vPing.textContent = state.ping;
+      // FPS color dot
+      const dot = document.querySelector('.tech-pill .dot');
+      if(dot) {
+        dot.classList.remove('fps-good','fps-mid','fps-bad');
+        if(state.fps >= 60) dot.classList.add('fps-good');
+        else if(state.fps >= 30) dot.classList.add('fps-mid');
+        else dot.classList.add('fps-bad');
+      }
+
+      if(UI.mods.id) UI.mods.id.style.display = state.modules.id !== false ? 'flex' : 'none';
+      if(UI.mods.tech) UI.mods.tech.style.display = state.modules.tech ? 'flex' : 'none';
+      if(UI.mods.metaRow) UI.mods.metaRow.style.display = (state.modules.id !== false || state.modules.tech) ? 'flex' : 'none';
+      if(UI.mods.serverRow) UI.mods.serverRow.style.display = state.modules.server ? 'flex' : 'none';
+      if(UI.mods.playerRow) UI.mods.playerRow.style.display = state.modules.player ? 'flex' : 'none';
+      if(UI.mods.online) UI.mods.online.style.display = state.modules.online ? 'flex' : 'none';
+      if(UI.mods.date) UI.mods.date.style.display = state.modules.player ? 'flex' : 'none';
+
+      renderWeather();
+    }
+
+    // --- ANNOUNCEMENTS TICKER ---
+    let announceTimer = null;
+    let currentAnnounceIdx = 0;
+
+    const DEFAULT_ANNOUNCEMENTS = [
+      {
+        tag: 'DISCORD',
+        title: 'COMMUNAUTÉ OFFICIELLE',
+        text: 'Rejoins notre communauté',
+        icon: 'fa-brands fa-discord',
+        color: '#5865F2',
+        cta: 'REJOINDRE'
+      },
+      {
+        tag: 'BOUTIQUE',
+        title: 'OFFRES VIP & VÉHICULES',
+        text: 'Découvre notre boutique',
+        icon: 'fa-solid fa-cart-shopping',
+        color: '#e62121',
+        cta: 'VISITER'
+      },
+      {
+        tag: 'REPORT',
+        title: 'ASSISTANCE & MODÉRATION',
+        text: 'Signale un joueur ou un problème',
+        icon: 'fa-solid fa-triangle-exclamation',
+        color: '#f39c12',
+        cta: 'SIGNALER'
+      },
+      {
+        tag: 'RÈGLEMENT',
+        title: 'GUIDE & LOIS RP',
+        text: 'Consulte les règles du serveur',
+        icon: 'fa-solid fa-book-bookmark',
+        color: '#2ecc71',
+        cta: 'LIRE'
+      },
+      {
+        tag: 'SITE WEB',
+        title: 'PORTAIL DU SERVEUR',
+        text: 'Retrouve toutes les informations',
+        icon: 'fa-solid fa-globe',
+        color: '#00cec9',
+        cta: 'OUVRIR'
+      },
+      {
+        tag: 'SUPPORT',
+        title: 'SUPPORT DU STAFF',
+        text: 'Contacte notre équipe',
+        icon: 'fa-solid fa-headset',
+        color: '#a29bfe',
+        cta: 'TICKET'
+      }
+    ];
+
+    let editingAnnounceIndex = -1;
+
+    const TAG_TITLE_MAP = {
+      'DISCORD': 'REJOINS LA COMMUNAUTÉ',
+      'BOUTIQUE': 'OFFRES VIP & VÉHICULES',
+      'SHOP': 'OFFRES VIP & BOUTIQUE',
+      'SUPPORT': 'BESOIN D\'ASSISTANCE ?',
+      'AIDE': 'ASSISTANCE & AIDE RP',
+      'EVENT': 'TOURNOI CE SOIR À 21H',
+      'REPORT': 'ASSISTANCE & MODÉRATION',
+      'RÈGLEMENT': 'GUIDE & RÈGLEMENT RP',
+      'REGLEMENT': 'GUIDE & RÈGLEMENT RP',
+      'RÈGLES': 'GUIDE & RÈGLEMENT RP',
+      'SITE WEB': 'PORTAIL DU SERVEUR',
+      'WEB': 'SITE WEB DU SERVEUR',
+      'INFO': 'ANNONCE OFFICIELLE'
+    };
+
+    function ensureItemTitle(item) {
+      if(!item) return item;
+      const tagUpper = (item.tag || '').trim().toUpperCase();
+      // Si le titre est absent, vide, ou s'il répète simplement le nom du tag
+      if(!item.title || typeof item.title !== 'string' || item.title.trim() === '' || item.title.trim().toUpperCase() === tagUpper) {
+        item.title = TAG_TITLE_MAP[tagUpper] || (item.tag ? `ANNONCE ${item.tag.toUpperCase()}` : 'ANNONCE OFFICIELLE');
+      }
+      if(!item.text || typeof item.text !== 'string' || item.text.trim() === '') {
+        if(tagUpper === 'DISCORD') item.text = 'discord.gg/bloodleak';
+        else if(tagUpper === 'BOUTIQUE' || tagUpper === 'SHOP') item.text = 'shop.bloodleak.fr';
+        else if(tagUpper === 'SUPPORT') item.text = 'Tapez /report en jeu';
+        else if(tagUpper === 'EVENT') item.text = 'Gros cashprize & surprises !';
+        else item.text = 'Rejoins notre serveur et profite des avantages';
+      }
+      return item;
+    }
+
+    function loadSavedAnnouncements() {
+      try {
+        const saved = localStorage.getItem('bloodleak_hud_announcements');
+        if(saved) {
+          const parsed = JSON.parse(saved);
+          if(parsed && typeof parsed === 'object') {
+            if(parsed.enabled !== undefined) state.announcements.enabled = Boolean(parsed.enabled);
+            if(parsed.interval) state.announcements.interval = parseInt(parsed.interval) || 8500;
+            if(Array.isArray(parsed.items) && parsed.items.length > 0) {
+              state.announcements.items = parsed.items.map(ensureItemTitle);
+            }
+          }
+        }
+      } catch(e) {}
+      if(!state.announcements.items || state.announcements.items.length === 0) {
+        state.announcements.items = DEFAULT_ANNOUNCEMENTS.map(item => ensureItemTitle(Object.assign({}, item)));
+      }
+    }
+
+    function saveAnnouncementsToStorage() {
+      try {
+        localStorage.setItem('bloodleak_hud_announcements', JSON.stringify(state.announcements));
+      } catch(e) {}
+    }
+
+    function initAnnouncements(cfg, force = false) {
+      if(!cfg) return;
+      if(cfg.enabled !== undefined) state.announcements.enabled = Boolean(cfg.enabled);
+      if(cfg.interval) state.announcements.interval = parseInt(cfg.interval) || 8500;
+      if(Array.isArray(cfg.items) && cfg.items.length > 0) {
+        state.announcements.items = cfg.items.map(item => ensureItemTitle(Object.assign({}, item)));
+      } else if(!state.announcements.items || state.announcements.items.length === 0) {
+        state.announcements.items = DEFAULT_ANNOUNCEMENTS.map(item => ensureItemTitle(Object.assign({}, item)));
+      }
+      const displayChanged = cfg.display && JSON.stringify(cfg.display) !== JSON.stringify(state.announcements.display);
+      if(cfg.display && typeof cfg.display === 'object') state.announcements.display = cfg.display;
+      currentAnnounceIdx = 0;
+      startAnnouncementTicker();
+      if(displayChanged || !annPeriodTimer) startAnnouncementPeriod();
+      if(UI.configModal && UI.configModal.classList.contains('open')) {
+        renderAnnouncementsConfigList();
+      }
+    }
+
+    function showAnnouncementItem(idx) {
+      const items = state.announcements.items;
+      if(!items || items.length === 0) return;
+      const item = items[idx % items.length];
+      if(!item || !UI.announcement) return;
+
+      ensureItemTitle(item);
+      // Les suffixes d'opacité ci-dessous ('45', '85') exigent un hex #rrggbb
+      let color = String(item.color || '#5865F2').trim();
+      if(/^#[0-9a-f]{3}$/i.test(color)) color = '#' + color.slice(1).split('').map(c => c + c).join('');
+      if(!/^#[0-9a-f]{6}$/i.test(color)) color = '#5865F2';
+      UI.announcement.style.setProperty('--ann-color', color);
+
+      // Reflet lumineux de transition
+      const annCard = $('ann-card');
+      if(annCard) {
+        annCard.classList.remove('swap');
+        void annCard.offsetWidth;
+        annCard.classList.add('swap');
+      }
+      UI.announcement.style.setProperty('--ann-glow', color + '45');
+      UI.announcement.style.setProperty('--ann-glow-high', color + '85');
+
+      // Update pagination pips
+      if(UI.annPips) {
+        const count = items.length;
+        if(UI.annPips.children.length !== count) {
+          UI.annPips.innerHTML = '';
+          for(let i = 0; i < count; i++) {
+            const pip = document.createElement('span');
+            pip.className = 'ann-pip' + (i === (idx % count) ? ' active' : '');
+            UI.annPips.appendChild(pip);
+          }
+        } else {
+          Array.from(UI.annPips.children).forEach((pip, i) => {
+            if(i === (idx % count)) {
+              pip.classList.add('active');
+            } else {
+              pip.classList.remove('active');
+            }
+          });
+        }
+      }
+
+      // Pop animation on icon box
+      if(UI.annIconBox) {
+        UI.annIconBox.classList.remove('pop');
+        void UI.annIconBox.offsetWidth;
+        UI.annIconBox.classList.add('pop');
+      }
+
+      // Smooth slide transition for text & CTA
+      if(UI.annTitle) UI.annTitle.classList.add('sliding');
+      if(UI.annText) UI.annText.classList.add('sliding');
+      if(UI.annCtaBox) UI.annCtaBox.classList.add('sliding');
+
+      setTimeout(() => {
+        if(UI.annIcon) UI.annIcon.className = item.icon || 'fa-solid fa-bullhorn';
+        const tag = (item.tag || 'INFO').toUpperCase();
+        if(UI.annTag) UI.annTag.textContent = tag;
+        if(UI.annTitle) UI.annTitle.textContent = item.title || 'ANNONCE OFFICIELLE';
+        if(UI.annText) UI.annText.textContent = item.text || '';
+
+        if(UI.annCta) {
+          let cta = item.cta;
+          if(!cta) {
+            if(tag === 'DISCORD') cta = 'REJOINDRE';
+            else if(tag === 'BOUTIQUE' || tag === 'SHOP') cta = 'VISITER';
+            else if(tag === 'REPORT' || tag === 'SIGNALER') cta = 'SIGNALER';
+            else if(tag === 'RÈGLEMENT' || tag === 'REGLEMENT' || tag === 'RÈGLES') cta = 'LIRE';
+            else if(tag === 'SITE WEB' || tag === 'WEB' || tag === 'SITE') cta = 'OUVRIR';
+            else if(tag === 'SUPPORT' || tag === 'AIDE') cta = 'TICKET';
+            else cta = 'VOIR';
+          }
+          UI.annCta.textContent = cta;
+        }
+
+        if(UI.annTitle) UI.annTitle.classList.remove('sliding');
+        if(UI.annText) UI.annText.classList.remove('sliding');
+        if(UI.annCtaBox) UI.annCtaBox.classList.remove('sliding');
+      }, 160);
+
+      // Smooth depleting progress bar
+      if(UI.annProgressFill) {
+        UI.annProgressFill.style.transition = 'none';
+        UI.annProgressFill.style.width = '100%';
+        void UI.annProgressFill.offsetWidth;
+        const dur = Math.max(3000, state.announcements.interval || 8000);
+        UI.annProgressFill.style.transition = `width ${dur}ms linear`;
+        UI.annProgressFill.style.width = '0%';
+      }
+    }
+
+    function startAnnouncementTicker() {
+      if(announceTimer) {
+        clearInterval(announceTimer);
+        announceTimer = null;
+      }
+      if(!state.announcements.items || state.announcements.items.length === 0) {
+        state.announcements.items = DEFAULT_ANNOUNCEMENTS.map(item => Object.assign({}, item));
+      }
+      if(!state.announcements.enabled || state.modules.announce === false) {
+        updateAnnouncementVisibility();
+        return;
+      }
+      updateAnnouncementVisibility();
+      showAnnouncementItem(currentAnnounceIdx);
+      const interval = Math.max(3000, state.announcements.interval || 8500);
+      announceTimer = setInterval(() => {
+        if(!state.announcements.enabled || state.modules.announce === false || isEditMode) return;
+        currentAnnounceIdx = (currentAnnounceIdx + 1) % state.announcements.items.length;
+        showAnnouncementItem(currentAnnounceIdx);
+      }, interval);
+    }
+
+    // --- AFFICHAGE PÉRIODIQUE & MASQUAGES CONTEXTUELS (véhicule, visée, cinéma) ---
+    let annPeriodTimer = null;
+    let annPeriodVisible = true;
+
+    function getAnnDisplay() {
+      const d = state.announcements.display || {};
+      return {
+        mode: d.mode === 'always' ? 'always' : 'periodic',
+        showDuration: Math.max(5000, parseInt(d.showDuration) || 20000),
+        cycleInterval: Math.max(15000, parseInt(d.cycleInterval) || 300000),
+        hideInVehicle: d.hideInVehicle !== false,
+        hideWhenAiming: d.hideWhenAiming !== false,
+        hideInCinematic: d.hideInCinematic !== false
+      };
+    }
+
+    function updateAnnouncementVisibility() {
+      if(!UI.announcement) return;
+      const cfg = getAnnDisplay();
+      const enabled = state.announcements.enabled && state.modules.announce !== false;
+      UI.announcement.style.display = (enabled || isEditMode) ? 'flex' : 'none';
+
+      const away = !isEditMode && (
+        !annPeriodVisible ||
+        (cfg.hideInVehicle && state.inVehicle) ||
+        (cfg.hideWhenAiming && state.aiming) ||
+        (cfg.hideInCinematic && state.cinematic)
+      );
+      UI.announcement.classList.toggle('ann-away', away);
+    }
+
+    // Cycle : visible pendant showDuration, puis masquée jusqu'à la prochaine apparition
+    function startAnnouncementPeriod() {
+      if(annPeriodTimer) {
+        clearTimeout(annPeriodTimer);
+        annPeriodTimer = null;
+      }
+      const cfg = getAnnDisplay();
+      if(cfg.mode === 'always') {
+        annPeriodVisible = true;
+        updateAnnouncementVisibility();
+        return;
+      }
+      const showPhase = () => {
+        annPeriodVisible = true;
+        // Chaque apparition commence sur une nouvelle annonce
+        if(state.announcements.items && state.announcements.items.length > 0) {
+          currentAnnounceIdx = (currentAnnounceIdx + 1) % state.announcements.items.length;
+          showAnnouncementItem(currentAnnounceIdx);
+        }
+        updateAnnouncementVisibility();
+        annPeriodTimer = setTimeout(hidePhase, cfg.showDuration);
+      };
+      const hidePhase = () => {
+        annPeriodVisible = false;
+        updateAnnouncementVisibility();
+        annPeriodTimer = setTimeout(showPhase, Math.max(0, cfg.cycleInterval - cfg.showDuration));
+      };
+      annPeriodVisible = true;
+      updateAnnouncementVisibility();
+      annPeriodTimer = setTimeout(hidePhase, cfg.showDuration);
+    }
+
+    function setAdminState(isAdmin) {
+      state.isAdmin = Boolean(isAdmin);
+      document.body.classList.toggle('hud-admin', state.isAdmin);
+      // Un non-admin ne doit pas rester sur l'onglet Annonces
+      if(!state.isAdmin && UI.tabPaneAnnouncements && UI.tabPaneAnnouncements.classList.contains('active')) {
+        switchConfigTab('tab-modules');
+      }
+      if(!state.isAdmin && UI.annEditorCard) UI.annEditorCard.style.display = 'none';
+    }
+
+    // --- IN-GAME ANNOUNCEMENT CONFIGURATION & EDITOR (/hud) ---
+    function renderAnnouncementsConfigList() {
+      if(!UI.annItemsList) return;
+      const items = state.announcements.items || [];
+      if(UI.annCountBadge) UI.annCountBadge.textContent = items.length;
+      if(UI.annCfgEnabled) UI.annCfgEnabled.checked = (state.announcements.enabled !== false);
+      if(UI.annCfgInterval) UI.annCfgInterval.value = ((state.announcements.interval || 8500) / 1000).toFixed(1);
+
+      if(items.length === 0) {
+        UI.annItemsList.innerHTML = `
+          <div style="text-align: center; padding: 22px 10px; color: rgba(255,255,255,0.45); font-size: 11px;">
+            <i class="fa-solid fa-bullhorn" style="font-size: 22px; margin-bottom: 8px; opacity: 0.5; color: var(--c-red);"></i><br>
+            Aucune annonce active pour le moment.<br>
+            Cliquez sur <b>"Nouvelle Annonce"</b> pour en ajouter une.
+          </div>
+        `;
+        return;
+      }
+
+      UI.annItemsList.innerHTML = items.map((item, index) => {
+        // Contenu échappé : les annonces peuvent venir du serveur (innerHTML)
+        const color = /^#[0-9a-f]{6}$/i.test(item.color || '') ? item.color : '#5865F2';
+        const icon = escapeHtml(item.icon || 'fa-solid fa-bullhorn');
+        const tag = escapeHtml((item.tag || 'INFO').toUpperCase());
+        const title = escapeHtml(item.title || 'ANNONCE');
+        const text = escapeHtml(item.text || '');
+        const cta = escapeHtml(item.cta || 'VOIR');
+        return `
+          <div class="ann-item-row" style="--row-color: ${color};">
+            <div class="ann-item-color" style="background: ${color};">
+              <i class="${icon}"></i>
+            </div>
+            <div class="ann-item-info">
+              <div class="ann-item-top">
+                <span class="ann-item-tag" style="color: ${color}; border: 1px solid ${color}45;">${tag}</span>
+                <span class="ann-item-title">${title}</span>
+              </div>
+              <div class="ann-item-desc">${text} ${cta ? `• <b style="color: ${color};">[${cta}]</b>` : ''}</div>
+            </div>
+            <div class="ann-item-actions">
+              <button type="button" class="ann-action-btn edit-btn" data-index="${index}" title="Modifier cette annonce">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button type="button" class="ann-action-btn delete-btn" data-index="${index}" title="Supprimer cette annonce">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      UI.annItemsList.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.getAttribute('data-index'), 10);
+          openAnnounceEditor(idx);
+        });
+      });
+
+      UI.annItemsList.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.getAttribute('data-index'), 10);
+          deleteAnnounceItem(idx);
+        });
+      });
+    }
+
+    function openAnnounceEditor(index = -1) {
+      AudioEngine.click();
+      editingAnnounceIndex = index;
+      if(!UI.annEditorCard) return;
+
+      if(index >= 0 && state.announcements.items && state.announcements.items[index]) {
+        const item = state.announcements.items[index];
+        if(UI.annEditorModalTitle) UI.annEditorModalTitle.innerHTML = `<i class="fa-solid fa-pen" style="margin-right: 5px;"></i> MODIFIER L'ANNONCE #${index + 1}`;
+        if(UI.annEditTag) UI.annEditTag.value = item.tag || '';
+        if(UI.annEditCta) UI.annEditCta.value = item.cta || '';
+        if(UI.annEditTitle) UI.annEditTitle.value = item.title || '';
+        if(UI.annEditText) UI.annEditText.value = item.text || '';
+        if(UI.annEditIcon) UI.annEditIcon.value = item.icon || 'fa-solid fa-bullhorn';
+        if(UI.annEditColor) UI.annEditColor.value = item.color || '#5865F2';
+      } else {
+        editingAnnounceIndex = -1;
+        if(UI.annEditorModalTitle) UI.annEditorModalTitle.innerHTML = `<i class="fa-solid fa-plus" style="margin-right: 5px;"></i> NOUVELLE ANNONCE`;
+        if(UI.annEditTag) UI.annEditTag.value = 'ANNONCE';
+        if(UI.annEditCta) UI.annEditCta.value = 'VISITER';
+        if(UI.annEditTitle) UI.annEditTitle.value = 'TITRE DE L\'ANNONCE';
+        if(UI.annEditText) UI.annEditText.value = 'Texte ou lien de l\'annonce';
+        if(UI.annEditIcon) UI.annEditIcon.value = 'fa-solid fa-bullhorn';
+        if(UI.annEditColor) UI.annEditColor.value = '#e62121';
+      }
+
+      UI.annEditorCard.style.display = 'flex';
+      updateAnnounceLivePreview();
+      UI.annEditorCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeAnnounceEditor() {
+      AudioEngine.click();
+      if(UI.annEditorCard) UI.annEditorCard.style.display = 'none';
+      editingAnnounceIndex = -1;
+    }
+
+    function updateAnnounceLivePreview() {
+      const tag = (UI.annEditTag ? UI.annEditTag.value.trim() : '') || 'ANNONCE';
+      const cta = (UI.annEditCta ? UI.annEditCta.value.trim() : '') || 'VOIR';
+      const title = (UI.annEditTitle ? UI.annEditTitle.value.trim() : '') || 'TITRE DE L\'ANNONCE';
+      const text = (UI.annEditText ? UI.annEditText.value.trim() : '') || 'Texte de description...';
+      const icon = (UI.annEditIcon ? UI.annEditIcon.value.trim() : '') || 'fa-solid fa-bullhorn';
+      const color = (UI.annEditColor ? UI.annEditColor.value : '') || '#5865F2';
+
+      if(UI.annEditIconPreview) UI.annEditIconPreview.innerHTML = `<i class="${icon}"></i>`;
+      if(UI.prevIcon) UI.prevIcon.className = icon;
+      if(UI.prevTag) UI.prevTag.textContent = tag.toUpperCase();
+      if(UI.prevTitle) UI.prevTitle.textContent = title.toUpperCase();
+      if(UI.prevText) UI.prevText.textContent = text;
+      if(UI.prevCta) UI.prevCta.textContent = cta.toUpperCase();
+
+      if(UI.annLivePreview) {
+        UI.annLivePreview.style.setProperty('--ann-color', color);
+        UI.annLivePreview.style.setProperty('--ann-glow', color + '45');
+      }
+      if(UI.prevIconBox) {
+        UI.prevIconBox.style.background = 'rgba(255, 255, 255, 0.025)';
+        UI.prevIconBox.style.boxShadow = `0 4px 12px rgba(0, 0, 0, 0.35), 0 0 12px ${color}35`;
+      }
+      if(UI.prevCta) {
+        UI.prevCta.style.background = `linear-gradient(90deg, ${color} 0%, rgba(176, 7, 14, 0.95) 100%)`;
+        UI.prevCta.style.boxShadow = `0 4px 16px ${color}55`;
+      }
+    }
+
+    function saveAnnounceEditorItem() {
+      const tag = (UI.annEditTag ? UI.annEditTag.value.trim() : '') || 'ANNONCE';
+      const cta = (UI.annEditCta ? UI.annEditCta.value.trim() : '') || 'VOIR';
+      const title = (UI.annEditTitle ? UI.annEditTitle.value.trim() : '') || 'TITRE DE L\'ANNONCE';
+      const text = (UI.annEditText ? UI.annEditText.value.trim() : '') || '';
+      const icon = (UI.annEditIcon ? UI.annEditIcon.value.trim() : '') || 'fa-solid fa-bullhorn';
+      const color = (UI.annEditColor ? UI.annEditColor.value : '') || '#5865F2';
+
+      const newItem = {
+        tag: tag.toUpperCase(),
+        title: title.toUpperCase(),
+        text: text,
+        icon: icon,
+        color: color,
+        cta: cta.toUpperCase()
+      };
+
+      if(!Array.isArray(state.announcements.items)) {
+        state.announcements.items = [];
+      }
+
+      if(editingAnnounceIndex >= 0 && editingAnnounceIndex < state.announcements.items.length) {
+        state.announcements.items[editingAnnounceIndex] = newItem;
+      } else {
+        state.announcements.items.push(newItem);
+      }
+
+      AudioEngine.click();
+      saveAnnouncementsToStorage();
+      closeAnnounceEditor();
+      renderAnnouncementsConfigList();
+      currentAnnounceIdx = (editingAnnounceIndex >= 0 ? editingAnnounceIndex : state.announcements.items.length - 1);
+      startAnnouncementTicker();
+    }
+
+    function deleteAnnounceItem(index) {
+      if(!state.announcements.items || !state.announcements.items[index]) return;
+      AudioEngine.click();
+      state.announcements.items.splice(index, 1);
+      if(editingAnnounceIndex === index) {
+        closeAnnounceEditor();
+      } else if(editingAnnounceIndex > index) {
+        editingAnnounceIndex--;
+      }
+      saveAnnouncementsToStorage();
+      renderAnnouncementsConfigList();
+      currentAnnounceIdx = 0;
+      startAnnouncementTicker();
+    }
+
+    function switchConfigTab(tabId) {
+      if(tabId === 'tab-announcements' && !state.isAdmin) tabId = 'tab-modules';
+      AudioEngine.click();
+      const tabs = [
+        { btn: UI.tabBtnModules, pane: UI.tabPaneModules, id: 'tab-modules' },
+        { btn: UI.tabBtnAnnouncements, pane: UI.tabPaneAnnouncements, id: 'tab-announcements' }
+      ];
+
+      tabs.forEach(t => {
+        if(t.btn) {
+          if(t.id === tabId) t.btn.classList.add('active');
+          else t.btn.classList.remove('active');
+        }
+        if(t.pane) {
+          if(t.id === tabId) {
+            t.pane.classList.add('active');
+            t.pane.style.display = 'flex';
+          } else {
+            t.pane.classList.remove('active');
+            t.pane.style.display = 'none';
+          }
+        }
+      });
+
+      if(tabId === 'tab-announcements') {
+        renderAnnouncementsConfigList();
+      }
+    }
+
+    function saveAnnouncementsToServer() {
+      AudioEngine.click();
+      if(!UI.btnSaveServerAnn) return;
+
+      const origText = UI.btnSaveServerAnn.innerHTML;
+      UI.btnSaveServerAnn.disabled = true;
+      UI.btnSaveServerAnn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sauvegarde en cours...`;
+
+      try {
+        fetch(NUI_URL + 'saveServerAnnouncements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+          body: JSON.stringify(state.announcements)
+        }).then(() => {
+          UI.btnSaveServerAnn.innerHTML = `<i class="fa-solid fa-check"></i> Enregistré sur le serveur !`;
+          UI.btnSaveServerAnn.style.background = 'linear-gradient(135deg, rgba(46,204,113,0.3) 0%, rgba(18,22,32,0.95) 100%)';
+          UI.btnSaveServerAnn.style.borderColor = 'rgba(46,204,113,0.6)';
+          setTimeout(() => {
+            if(UI.btnSaveServerAnn) {
+              UI.btnSaveServerAnn.disabled = false;
+              UI.btnSaveServerAnn.innerHTML = origText;
+              UI.btnSaveServerAnn.style.background = '';
+              UI.btnSaveServerAnn.style.borderColor = '';
+            }
+          }, 2200);
+        }).catch(() => {
+          UI.btnSaveServerAnn.innerHTML = `<i class="fa-solid fa-xmark"></i> Erreur d'envoi`;
+          setTimeout(() => {
+            if(UI.btnSaveServerAnn) {
+              UI.btnSaveServerAnn.disabled = false;
+              UI.btnSaveServerAnn.innerHTML = origText;
+            }
+          }, 2000);
+        });
+      } catch(e) {
+        UI.btnSaveServerAnn.disabled = false;
+        UI.btnSaveServerAnn.innerHTML = origText;
+      }
+    }
+
+    function resetDefaultAnnouncements() {
+      AudioEngine.click();
+      state.announcements.enabled = true;
+      state.announcements.interval = 8500;
+      state.announcements.items = DEFAULT_ANNOUNCEMENTS.map(item => Object.assign({}, item));
+      saveAnnouncementsToStorage();
+      closeAnnounceEditor();
+      renderAnnouncementsConfigList();
+      currentAnnounceIdx = 0;
+      startAnnouncementTicker();
+    }
+
+    function renderExtras() {
+      // Radio
+      if(state.modules.radio && state.radioActive && state.radioFreq && state.radioFreq !== '') {
+        UI.mods.radio.classList.remove('hidden');
+        UI.vRadio.textContent = state.radioFreq;
+      } else {
+        UI.mods.radio.classList.add('hidden');
+      }
+
+      // Compass & Street — Premium Arc
+      if(state.modules.compass) {
+        UI.mods.compass.classList.remove('hidden');
+        const heading = state.heading || 'N';
+        UI.compassHeading.textContent = heading;
+        // Update arc compass label
+        const arcLabel = $('compass-arc-label');
+        const arcDeg   = $('compass-degree');
+        const arcActive = $('compass-arc-active');
+        if(arcLabel) arcLabel.textContent = heading;
+        // Map heading string → degrees
+        const headingDegMap = {N:0,NNE:22,NE:45,ENE:67,E:90,ESE:112,SE:135,SSE:157,S:180,SSO:202,SO:225,OSO:247,O:270,ONO:292,NO:315,NNO:337};
+        let deg = state.headingDeg;
+        if(deg === undefined || deg === null) deg = headingDegMap[heading] || 0;
+        deg = Math.round(deg) % 360;
+        if(arcDeg) arcDeg.textContent = String(deg).padStart(3,'0') + '°';
+        // Animate the arc stroke-dashoffset: full arc length ≈ 75.4, center=37.7
+        if(arcActive) {
+          const arcLen = 75.4;
+          // Spread: ±30° of the 180° arc maps to ±arcLen/6 offset
+          const spread = (deg / 360) * arcLen;
+          const dashOff = Math.max(0, Math.min(arcLen, arcLen - spread));
+          arcActive.style.strokeDashoffset = dashOff;
+          // Color shift: N=red, E=orange, S=yellow, W=cyan
+          const hue = Math.round((deg / 360) * 60); // 0=red, 60=yellow
+          arcActive.style.stroke = `hsl(${hue}, 95%, 60%)`;
+          arcActive.style.filter = `drop-shadow(0 0 5px hsl(${hue}, 95%, 50%))`;
+          if(arcLabel) arcLabel.style.fill = `hsl(${hue}, 95%, 65%)`;
+        }
+        UI.streetName.textContent = state.street || 'Inconnu';
+        UI.zoneName.textContent = state.zone || 'San Andreas';
+      } else {
+        UI.mods.compass.classList.add('hidden');
+      }
+
+      // Capsule Weapon HUD
+      const isWeaponActive = Boolean(state.weaponShow);
+      if(isWeaponActive) {
+        UI.mods.weapon.style.display = 'flex';
+        UI.mods.weapon.style.opacity = '1';
+        UI.weaponName.textContent = state.weaponName || 'Arme';
+
+        // 1. Silhouette SVG ou icône FontAwesome
+        const wType = state.weaponType || 'pistol';
+        if(WeaponSVGs[wType]) {
+          if(UI.weaponIconBox) UI.weaponIconBox.innerHTML = WeaponSVGs[wType];
+        } else if(UI.weaponIconBox) {
+          UI.weaponIconBox.innerHTML = `<i class="${state.weaponIcon || 'fa-solid fa-gun'}"></i>`;
+        }
+
+        // 2. Mode de tir ou animation de rechargement
+        if(state.isReloading) {
+          UI.fireMode.className = 'fire-mode-tag reloading';
+          UI.fireMode.innerHTML = `<i class="fa-solid fa-arrows-rotate fa-spin" style="font-size: 7px;"></i> RECHARGE...`;
+          UI.mods.weapon.classList.add('is-reloading');
+        } else {
+          UI.fireMode.className = 'fire-mode-tag';
+          UI.fireMode.innerHTML = `<i class="fa-solid fa-circle" style="font-size: 5px;"></i> ${state.fireMode || 'SEMI-AUTO'}`;
+          UI.mods.weapon.classList.remove('is-reloading');
+        }
+
+        // 3. Badges d'accessoires / Attachments (Silencieux, Lampe, Lunette)
+        if(UI.weaponAttachments) {
+          let attHtml = '';
+          if(state.isSilenced) {
+            attHtml += `<span class="attachment-tag silencer" title="Silencieux équipé"><i class="fa-solid fa-volume-xmark"></i> SIL</span>`;
+          }
+          if(state.hasFlashlight) {
+            attHtml += `<span class="attachment-tag flashlight" title="Lampe torche active"><i class="fa-solid fa-lightbulb"></i> LMP</span>`;
+          }
+          if(state.hasScope) {
+            attHtml += `<span class="attachment-tag scope" title="Lunette de visée"><i class="fa-solid fa-crosshairs"></i> VIZ</span>`;
+          }
+          UI.weaponAttachments.innerHTML = attHtml;
+        }
+
+        // 4. Gestion des munitions et alerte visuelle rouge de fin de chargeur
+        if(state.isMelee) {
+          UI.ammoClip.textContent = '∞';
+          if(UI.ammoDigitsBox) UI.ammoDigitsBox.classList.add('is-melee');
+          UI.mods.weapon.classList.remove('low-ammo');
+        } else {
+          UI.ammoClip.textContent = state.clip;
+          UI.ammoTotal.textContent = state.ammo;
+          if(UI.ammoDigitsBox) UI.ammoDigitsBox.classList.remove('is-melee');
+
+          if(state.isLowAmmo) {
+            UI.mods.weapon.classList.add('low-ammo');
+          } else {
+            UI.mods.weapon.classList.remove('low-ammo');
+          }
+        }
+      } else {
+        if(!isEditMode) {
+          UI.mods.weapon.style.display = 'none';
+          UI.mods.weapon.classList.remove('low-ammo', 'is-reloading', 'shooting-flash');
+        }
+      }
+
+      // Annonces défilantes au-dessus des statuts
+      updateAnnouncementVisibility();
+    }
+
+    // Modal Handlers
+    function toggleSettings(open) {
+      if(open) {
+        document.body.style.display = 'block';
+        AudioEngine.modalOpen();
+        if(UI.configOverlay) UI.configOverlay.classList.add('open');
+        UI.configModal.classList.add('open');
+        renderAnnouncementsConfigList();
+      } else {
+        AudioEngine.click();
+        if(UI.configOverlay) UI.configOverlay.classList.remove('open');
+        UI.configModal.classList.remove('open');
+        setEditMode(false);
+        try {
+          fetch(NUI_URL + 'closeSettings', { method: 'POST', body: JSON.stringify({}) });
+        } catch(e) {}
+      }
+    }
+
+    if (UI.demoConfigBtn) UI.demoConfigBtn.addEventListener('click', () => toggleSettings(true));
+    if (UI.demoVehicleBtn) UI.demoVehicleBtn.addEventListener('click', () => setVehicleState(!state.inVehicle));
+    if (UI.demoCinemaBtn) UI.demoCinemaBtn.addEventListener('click', () => setCinematic(!state.cinematic));
+    if (UI.configOverlay) UI.configOverlay.addEventListener('click', () => toggleSettings(false));
+    UI.btnCloseModal.addEventListener('click', () => toggleSettings(false));
+
+    // Tab Switching
+    if (UI.tabBtnModules) {
+      UI.tabBtnModules.addEventListener('click', () => switchConfigTab('tab-modules'));
+    }
+    if (UI.tabBtnAnnouncements) {
+      UI.tabBtnAnnouncements.addEventListener('click', () => switchConfigTab('tab-announcements'));
+    }
+
+    // Announcements Tab Controls
+    if (UI.annCfgEnabled) {
+      UI.annCfgEnabled.addEventListener('change', (e) => {
+        AudioEngine.toggle();
+        state.announcements.enabled = e.target.checked;
+        state.modules.announce = e.target.checked;
+        if(UI.chks.announce) UI.chks.announce.checked = e.target.checked;
+        saveAnnouncementsToStorage();
+        startAnnouncementTicker();
+      });
+    }
+
+    if (UI.annCfgInterval) {
+      UI.annCfgInterval.addEventListener('input', (e) => {
+        let sec = parseFloat(e.target.value);
+        if(isNaN(sec) || sec < 3) sec = 3;
+        if(sec > 60) sec = 60;
+        state.announcements.interval = Math.round(sec * 1000);
+        saveAnnouncementsToStorage();
+        startAnnouncementTicker();
+      });
+    }
+
+    if (UI.btnAddAnnItem) {
+      UI.btnAddAnnItem.addEventListener('click', () => openAnnounceEditor(-1));
+    }
+    if (UI.btnCancelAnnEdit) {
+      UI.btnCancelAnnEdit.addEventListener('click', closeAnnounceEditor);
+    }
+    if (UI.btnAnnFormCancel) {
+      UI.btnAnnFormCancel.addEventListener('click', closeAnnounceEditor);
+    }
+    if (UI.btnAnnFormSave) {
+      UI.btnAnnFormSave.addEventListener('click', saveAnnounceEditorItem);
+    }
+    if (UI.btnSaveServerAnn) {
+      UI.btnSaveServerAnn.addEventListener('click', saveAnnouncementsToServer);
+    }
+    if (UI.btnResetDefaultAnn) {
+      UI.btnResetDefaultAnn.addEventListener('click', resetDefaultAnnouncements);
+    }
+
+    // Live preview update on text/color changes
+    ['input', 'change'].forEach(evt => {
+      if(UI.annEditTag) UI.annEditTag.addEventListener(evt, updateAnnounceLivePreview);
+      if(UI.annEditCta) UI.annEditCta.addEventListener(evt, updateAnnounceLivePreview);
+      if(UI.annEditTitle) UI.annEditTitle.addEventListener(evt, updateAnnounceLivePreview);
+      if(UI.annEditText) UI.annEditText.addEventListener(evt, updateAnnounceLivePreview);
+      if(UI.annEditIcon) UI.annEditIcon.addEventListener(evt, updateAnnounceLivePreview);
+      if(UI.annEditColor) UI.annEditColor.addEventListener(evt, updateAnnounceLivePreview);
+    });
+
+    // Preset icon chips
+    document.querySelectorAll('.ann-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        AudioEngine.click();
+        const icon = chip.getAttribute('data-icon');
+        if(icon && UI.annEditIcon) {
+          UI.annEditIcon.value = icon;
+          updateAnnounceLivePreview();
+        }
+      });
+    });
+
+    // Preset color dots
+    document.querySelectorAll('.color-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        AudioEngine.click();
+        const col = dot.getAttribute('data-color');
+        if(col && UI.annEditColor) {
+          UI.annEditColor.value = col;
+          updateAnnounceLivePreview();
+        }
+      });
+    });
+
+    Object.keys(UI.chks).forEach(key => {
+      if(key === 'hideArmor') {
+        UI.chks[key].addEventListener('change', (e) => {
+          AudioEngine.toggle();
+          state.hideArmorWhenEmpty = e.target.checked;
+          renderStatus();
+        });
+      } else if(key === 'cinema') {
+        UI.chks[key].addEventListener('change', (e) => {
+          setCinematic(e.target.checked);
+          try {
+            fetch(NUI_URL + 'toggleCinematic', {
+              method: 'POST',
+              body: JSON.stringify({ active: e.target.checked })
+            });
+          } catch(err) {}
+        });
+      } else {
+        UI.chks[key].addEventListener('change', (e) => {
+          AudioEngine.toggle();
+          state.modules[key] = e.target.checked;
+          if(key === 'announce') {
+            state.announcements.enabled = e.target.checked;
+            if(UI.annCfgEnabled) UI.annCfgEnabled.checked = e.target.checked;
+            saveAnnouncementsToStorage();
+            startAnnouncementTicker();
+          }
+          renderMoney();
+          renderInfo();
+          renderExtras();
+        });
+      }
+    });
+
+    UI.btnResetConfig.addEventListener('click', () => {
+      AudioEngine.click();
+      applyScale(1.0);
+      resetPositions();
+      try {
+        localStorage.removeItem('bloodleak_hud_modules');
+      } catch(e) {}
+      Object.keys(state.modules).forEach(k => {
+        state.modules[k] = true;
+        if(UI.chks[k]) UI.chks[k].checked = true;
+      });
+      state.hideArmorWhenEmpty = false;
+      UI.chks.hideArmor.checked = false;
+      setCinematic(false);
+      resetDefaultAnnouncements();
+      renderStatus(); renderMoney(); renderInfo(); renderExtras();
+      startAnnouncementTicker();
+    });
+
+    UI.btnSaveConfig.addEventListener('click', () => {
+      AudioEngine.click();
+      toggleSettings(false);
+      saveAnnouncementsToStorage();
+      try {
+        localStorage.setItem('bloodleak_hud_modules', JSON.stringify(state.modules));
+        fetch(NUI_URL + 'saveSettings', {
+          method: 'POST',
+          body: JSON.stringify({
+            scale: state.scale,
+            modules: state.modules,
+            hideArmorWhenEmpty: state.hideArmorWhenEmpty,
+            positions: state.positions
+          })
+        });
+      } catch(e) {}
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if(e.key === 'Escape') {
+        if(isEditMode) {
+          setEditMode(false);
+          toggleSettings(true);
+        } else {
+          toggleSettings(false);
+        }
+      }
+    });
+
+    // --- ÉCOUTE DES MESSAGES NUI ---
+    window.addEventListener('message', (e) => {
+      const d = e.data;
+      if(!d) return;
+
+      if(d.action === 'initHud') {
+        // La visibilité est pilotée uniquement par 'setHudVisible' : forcer 'block' ici
+        // réaffichait le HUD à chaque changement de métier, même s'il était masqué.
+        if(!window.invokeNative) document.body.style.display = 'block';
+        if(d.player) {
+          if(d.player.id) state.id = d.player.id;
+          if(d.player.name) state.name = d.player.name;
+          if(d.player.job) {
+            state.job = d.player.job.label || state.job;
+            state.grade = d.player.job.grade_label || state.grade;
+          }
+          if(d.player.accounts) {
+            if(d.player.accounts.money !== undefined) state.cash = d.player.accounts.money;
+            if(d.player.accounts.bank !== undefined) state.bank = d.player.accounts.bank;
+            if(d.player.accounts.black_money !== undefined) state.dirty = d.player.accounts.black_money;
+            if(d.player.accounts.society !== undefined) state.society = d.player.accounts.society;
+          }
+        }
+        if(d.config) {
+          if(d.config.announcements) {
+            initAnnouncements(d.config.announcements);
+          }
+          if(d.config.defaultSettings) {
+            const hasSavedMod = localStorage.getItem('bloodleak_hud_modules');
+            if(d.config.defaultSettings.showWeapon !== undefined) {
+              if(!hasSavedMod || state.modules.weapon === undefined) {
+                state.modules.weapon = d.config.defaultSettings.showWeapon;
+                if(UI.chks.weapon) UI.chks.weapon.checked = state.modules.weapon;
+              }
+            }
+          }
+        }
+        renderInfo();
+        renderMoney();
+        renderExtras();
+      }
+      else if(d.action === 'setHudVisible' || d.type === 'toggleHUD' || d.action === 'showHud') {
+        const isVis = (d.visible !== undefined) ? d.visible : (d.show !== undefined ? d.show : d.state);
+        const wasHidden = document.body.style.display === 'none';
+        document.body.style.display = isVis ? 'block' : 'none';
+        // Ce branchement était dupliqué plus bas (code mort) : l'animation de boot ne jouait jamais
+        if(isVis && wasHidden) setTimeout(playBootScan, 80);
+      }
+      else if(d.action === 'setPauseMenu') {
+        if(d.isPaused) {
+          document.body.style.display = 'none';
+          if(UI.configModal) UI.configModal.classList.remove('open');
+        } else {
+          // Ne réafficher que si le HUD n'était pas masqué avant la pause
+          document.body.style.display = (d.hudVisible === false) ? 'none' : 'block';
+        }
+      }
+      else if(d.action === 'setDefaultPositions') {
+        if(d.positions && typeof d.positions === 'object') {
+          state.serverDefaults = d.positions;
+          const hasCustom = localStorage.getItem('bloodleak_hud_positions');
+          if(!hasCustom || d.force) {
+            applyPositions(state.serverDefaults);
+          }
+        }
+      }
+      else if(d.action === 'triggerSaveServerDefault') {
+        saveServerDefaultPositions();
+      }
+      else if(d.action === 'updateMinimapPosition' || d.type === 'updateMinimapPosition') {
+        if(d.position) {
+          applyMinimapPosition(d.position);
+        }
+      }
+      else if(d.action === 'updateVehicleState' || d.type === 'updateVehicleState') {
+        setVehicleState(d.inVehicle !== undefined ? d.inVehicle : d.state);
+      }
+      else if(d.action === 'toggleSettings' || d.type === 'toggleSettings') {
+        if(d.hasCarHud !== undefined) setHasCarHud(d.hasCarHud);
+        toggleSettings(d.open !== undefined ? d.open : true);
+      }
+      else if(d.action === 'setHasCarHud') {
+        setHasCarHud(d.hasCarHud);
+      }
+      else if(d.action === 'toggleCinematic' || d.type === 'toggleCinematic') {
+        setCinematic(d.active !== undefined ? d.active : !state.cinematic);
+      }
+      else if(d.action === 'updatePlayersCount' || d.action === 'updatePlayers') {
+        if(d.count !== undefined) state.playersCount = d.count;
+        if(d.max !== undefined) state.maxPlayers = d.max;
+        renderInfo();
+      }
+      else if(d.action === 'updateTech' || d.type === 'updateTech') {
+        if(d.fps !== undefined) state.fps = d.fps;
+        if(d.ping !== undefined) state.ping = d.ping;
+        renderInfo();
+      }
+      else if(d.action === 'updateWeather' || d.type === 'updateWeather') {
+        if(d.weather) {
+          if(d.weather.icon) state.weather.icon = d.weather.icon;
+          if(d.weather.color) state.weather.color = d.weather.color;
+          if(d.weather.temp !== undefined) state.weather.temp = d.weather.temp;
+          if(d.weather.label) state.weather.label = d.weather.label;
+          renderWeather();
+        }
+      }
+      else if(d.action === 'updateStatus' || d.type === 'updateStatus') {
+        const s = d.status || d;
+        if(s.health !== undefined) {
+          const v = parseFloat(s.health);
+          state.health = isNaN(v) ? 0 : v;
+        }
+        if(s.armor !== undefined) {
+          const v = parseFloat(s.armor);
+          state.armor = isNaN(v) ? 0 : v;
+        }
+        if(s.hunger !== undefined || s.food !== undefined) {
+          const raw = s.hunger !== undefined ? s.hunger : s.food;
+          const v = parseFloat(raw);
+          state.food = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+        }
+        if(s.thirst !== undefined || s.water !== undefined) {
+          const raw = s.thirst !== undefined ? s.thirst : s.water;
+          const v = parseFloat(raw);
+          state.water = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+        }
+        if(s.stamina !== undefined) {
+          const v = parseFloat(s.stamina);
+          state.stamina = isNaN(v) ? 0 : v;
+        }
+        if(s.stress !== undefined) {
+          const v = parseFloat(s.stress);
+          state.stress = isNaN(v) ? 0 : v;
+        }
+        if(s.isTalking !== undefined) {
+          state.talking = Boolean(s.isTalking);
+          renderVoice();
+        }
+        renderStatus();
+      }
+      else if(d.action === 'updateOxygen' || d.type === 'updateOxygen') {
+        if(d.oxygen !== undefined) { state.oxygen = d.oxygen; renderStatus(); }
+      }
+      else if(d.action === 'updateVoice' || d.type === 'updateVoice') {
+        if(d.voice) {
+          state.voiceRange = d.voice.mode || d.voice.range || 2;
+        } else if(d.voiceMode !== undefined) {
+          state.voiceRange = d.voiceMode;
+        } else if(d.mode !== undefined) {
+          state.voiceRange = d.mode;
+        }
+        if(d.talking !== undefined) state.talking = d.talking;
+        renderVoice();
+      }
+      else if(d.action === 'updateAccount' || d.type === 'updateMoney') {
+        if(d.name === 'money' || d.name === 'cash' || d.cash !== undefined) state.cash = d.money !== undefined ? d.money : d.cash;
+        if(d.name === 'bank' || d.bank !== undefined) state.bank = d.money !== undefined ? d.money : d.bank;
+        if(d.name === 'black_money' || d.name === 'dirty' || d.dirty !== undefined) state.dirty = d.money !== undefined ? d.money : d.dirty;
+        if(d.name === 'society' || d.society !== undefined) state.society = d.money !== undefined ? d.money : d.society;
+        renderMoney();
+      }
+      else if(d.action === 'updateJob' || d.type === 'updateRPInfo') {
+        if(d.player && d.player.id) state.id = d.player.id;
+        if(d.player && d.player.name) state.name = d.player.name;
+        if(d.job) {
+          state.job = d.job.label || state.job;
+          state.grade = d.job.grade_label || state.grade;
+        }
+        renderInfo();
+      }
+      else if(d.action === 'updateCompass' || d.type === 'updateCompass') {
+        if(d.heading !== undefined) state.heading = d.heading;
+        if(d.street !== undefined) state.street = d.street;
+        if(d.zone !== undefined) state.zone = d.zone;
+        if(d.deg !== undefined) state.headingDeg = d.deg;
+        renderExtras();
+      }
+      else if(d.action === 'updateRadio' || d.type === 'updateRadio') {
+        if(d.active !== undefined) state.radioActive = d.active;
+        if(d.freq !== undefined) state.radioFreq = d.freq;
+        renderExtras();
+      }
+      else if(d.action === 'updateWeapon' || d.type === 'updateWeapon') {
+        state.weaponShow = (d.show !== undefined) ? d.show : false;
+        if(d.weaponName !== undefined) state.weaponName = d.weaponName;
+        if(d.clip !== undefined) state.clip = d.clip;
+        if(d.ammo !== undefined) state.ammo = d.ammo;
+        if(d.maxClip !== undefined) state.maxClip = d.maxClip;
+        if(d.fireMode !== undefined) state.fireMode = d.fireMode;
+        if(d.icon !== undefined) state.weaponIcon = d.icon;
+        if(d.isMelee !== undefined) state.isMelee = d.isMelee;
+        if(d.weaponType !== undefined) state.weaponType = d.weaponType;
+        if(d.isLowAmmo !== undefined) state.isLowAmmo = d.isLowAmmo;
+        if(d.isReloading !== undefined) state.isReloading = d.isReloading;
+        if(d.isSilenced !== undefined) state.isSilenced = d.isSilenced;
+        if(d.hasFlashlight !== undefined) state.hasFlashlight = d.hasFlashlight;
+        if(d.hasScope !== undefined) state.hasScope = d.hasScope;
+        renderExtras();
+      }
+      else if(d.action === 'weaponShoot') {
+        if(UI.mods.weapon) {
+          UI.mods.weapon.classList.remove('shooting-flash');
+          if(UI.ammoClip) UI.ammoClip.classList.remove('ammo-bump');
+          void UI.mods.weapon.offsetWidth; // Force CSS reflow pour tirs rapides successifs
+          UI.mods.weapon.classList.add('shooting-flash');
+          if(UI.ammoClip) UI.ammoClip.classList.add('ammo-bump');
+          setTimeout(() => {
+            if(UI.mods.weapon) UI.mods.weapon.classList.remove('shooting-flash');
+            if(UI.ammoClip) UI.ammoClip.classList.remove('ammo-bump');
+          }, 120);
+        }
+      }
+      else if(d.action === 'weaponReloading') {
+        state.isReloading = (d.reloading !== undefined) ? d.reloading : false;
+        renderExtras();
+      }
+      // headingDeg: optional numeric degree from Lua
+      else if(d.action === 'updateHeadingDeg' || d.type === 'updateHeadingDeg') {
+        if(d.deg !== undefined) state.headingDeg = d.deg;
+        renderExtras();
+      }
+      else if(d.action === 'setAdmin') {
+        setAdminState(d.isAdmin);
+      }
+      else if(d.action === 'updateAiming') {
+        state.aiming = Boolean(d.aiming);
+        updateAnnouncementVisibility();
+      }
+      else if(d.action === 'setAnnouncements' || d.type === 'setAnnouncements') {
+        initAnnouncements(d.announcements || d.config, true);
+      }
+    });
+
+    // --- BOOT SCAN ANIMATION ---
+    function playBootScan() {
+      const scanLine = $('hud-scan-line');
+      if(scanLine) {
+        scanLine.classList.remove('active');
+        void scanLine.offsetWidth;
+        scanLine.classList.add('active');
+        setTimeout(() => scanLine.classList.remove('active'), 1100);
+      }
+      const bootTargets = ['top-right','bottom-left','bottom-center','weapon-hud','mod-radio'];
+      bootTargets.forEach(id => {
+        const el = $(id);
+        if(!el) return;
+        el.classList.remove('hud-boot-scan');
+        void el.offsetWidth;
+        el.classList.add('hud-boot-scan');
+      });
+      setTimeout(() => {
+        bootTargets.forEach(id => {
+          const el = $(id);
+          if(el) el.classList.remove('hud-boot-scan');
+        });
+      }, 1200);
+    }
+
+    // Init
+    initDragAndDrop();
+    loadSavedPositions();
+    loadSavedAnnouncements();
+    applyScale(1.0);
+    renderStatus();
+    renderVoice();
+    renderMoney();
+    renderInfo();
+    renderExtras();
+    startAnnouncementTicker();
+    startAnnouncementPeriod();
+    if (!window.invokeNative) {
+      setAdminState(true); // Aperçu navigateur : tout est visible
+      document.body.style.display = 'block';
+      setHasCarHud(true);
+      setTimeout(playBootScan, 120);
+    }
+
+    if (typeof GetParentResourceName === 'function') {
+      try {
+        fetch(`https://${GetParentResourceName()}/nuiReady`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+          body: JSON.stringify({})
+        }).catch(() => {});
+      } catch(e) {}
+    }
+  </script>
+</body>
+</html>
